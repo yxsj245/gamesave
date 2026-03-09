@@ -41,6 +41,10 @@ public class Game : INotifyPropertyChanged
     /// <summary>备注</summary>
     public string? Notes { get; set; }
 
+    /// <summary>是否设置了启动进程路径</summary>
+    [JsonIgnore]
+    public bool HasProcessPath => !string.IsNullOrWhiteSpace(ProcessPath);
+
     private bool _isRunning;
     /// <summary>指示游戏当前是否正在运行</summary>
     [JsonIgnore]
@@ -53,9 +57,20 @@ public class Game : INotifyPropertyChanged
             {
                 _isRunning = value;
                 OnPropertyChanged();
+                // 同时通知启动/停止按钮可见性变化
+                OnPropertyChanged(nameof(CanShowStartButton));
+                OnPropertyChanged(nameof(CanShowStopButton));
             }
         }
     }
+
+    /// <summary>是否显示启动按钮（有进程路径且未运行）</summary>
+    [JsonIgnore]
+    public bool CanShowStartButton => HasProcessPath && !IsRunning;
+
+    /// <summary>是否显示停止按钮（有进程路径且正在运行）</summary>
+    [JsonIgnore]
+    public bool CanShowStopButton => HasProcessPath && IsRunning;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

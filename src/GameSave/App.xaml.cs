@@ -63,6 +63,12 @@ namespace GameSave
             m_window = new Window();
             m_window.Title = "GameSave Manager";
 
+            // 设置窗口标题栏图标
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(m_window);
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+            var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+            appWindow.SetIcon("Assets/app.ico");
+
             Frame rootFrame = new Frame();
             rootFrame.NavigationFailed += OnNavigationFailed;
 

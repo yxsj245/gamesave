@@ -194,24 +194,24 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     
-                                    <!-- 启动游戏按钮 -->
+                                    <!-- 启动游戏按钮（仅设置了进程路径且未运行时显示） -->
                                     <Button Grid.Column="2" 
                                             Margin="16,0,0,0" 
                                             VerticalAlignment="Center"
                                             Style="{StaticResource AccentButtonStyle}"
                                             Click="ListItemLaunchGame_Click"
-                                            Visibility="{x:Bind IsRunning, Converter={StaticResource InverseBoolVisibilityConverter}, Mode=OneWay}"
+                                            Visibility="{x:Bind CanShowStartButton, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
                                             ToolTipService.ToolTip="启动游戏"
                                             Width="40" Height="40" Padding="0">
                                         <FontIcon Glyph="&#xE768;" FontSize="16"/>
                                     </Button>
 
-                                    <!-- 停止游戏按钮 -->
+                                    <!-- 停止游戏按钮（仅设置了进程路径且正在运行时显示） -->
                                     <Button Grid.Column="2" 
                                             Margin="16,0,0,0" 
                                             VerticalAlignment="Center"
                                             Click="ListItemLaunchGame_Click"
-                                            Visibility="{x:Bind IsRunning, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
+                                            Visibility="{x:Bind CanShowStopButton, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
                                             ToolTipService.ToolTip="结束游戏"
                                             Width="40" Height="40" Padding="0"
                                             Background="Transparent"
@@ -269,10 +269,11 @@
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Spacing="8">
-                            <!-- 启动游戏 -->
+                            <!-- 启动游戏（仅设置了进程路径时显示） -->
                             <Button Click="LaunchGame_Click"
                                     Style="{StaticResource AccentButtonStyle}"
-                                    ToolTipService.ToolTip="启动游戏">
+                                    ToolTipService.ToolTip="启动游戏"
+                                    Visibility="{Binding SelectedGame.HasProcessPath, Converter={StaticResource BoolVisibilityConverter}}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xE768;" FontSize="14"/>
                                     <TextBlock Text="启动"/>

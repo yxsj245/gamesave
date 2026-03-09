@@ -21,6 +21,7 @@
         <UseRidGraph>true</UseRidGraph>
         <Platforms>x86;x64;ARM64</Platforms>
         <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>Assets\app.ico</ApplicationIcon>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &gt;= 8">win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &lt; 8">win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
@@ -32,7 +33,12 @@
         <Content Include="Assets\Square150x150Logo.scale-200.png" />
         <Content Include="Assets\Square44x44Logo.scale-200.png" />
         <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-16.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-32.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-48.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-256.png" />
         <Content Include="Assets\StoreLogo.png" />
+        <Content Include="Assets\app.ico" />
         <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     </ItemGroup>
 
