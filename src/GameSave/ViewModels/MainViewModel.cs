@@ -606,7 +606,8 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 删除选中的游戏
     /// </summary>
-    public async Task<(bool success, string message)> DeleteGameAsync()
+    /// <param name="deleteCloudSaves">是否同时删除云端存档</param>
+    public async Task<(bool success, string message)> DeleteGameAsync(bool deleteCloudSaves = false)
     {
         if (SelectedGame == null)
             return (false, "请先选择一个游戏");
@@ -618,11 +619,35 @@ public partial class MainViewModel : BaseViewModel
             var gameName = SelectedGame.Name;
             var gameToDelete = SelectedGame;
 
+            // 若需要删除云端存档，先执行云端删除
+            if (deleteCloudSaves && !string.IsNullOrEmpty(gameToDelete.CloudConfigId))
+            {
+                try
+                {
+                    var cloudConfig = _configService.GetCloudConfigById(gameToDelete.CloudConfigId);
+                    if (cloudConfig != null)
+                    {
+                        StatusMessage = $"正在删除「{gameName}」的云端存档...";
+                        var cloudService = new CloudStorageService(cloudConfig, _configService);
+                        var deletedCount = await cloudService.DeleteGameAsync(gameToDelete.Id);
+                        System.Diagnostics.Debug.WriteLine($"[删除游戏] 已删除云端数据 {deletedCount} 个对象");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[删除游戏] 云端删除失败: {ex.Message}");
+                    // 云端删除失败不阻塞本地删除
+                }
+            }
+
             CloseDetails();
             Games.Remove(gameToDelete);
             await _gameService.DeleteGameAsync(gameToDelete);
 
-            StatusMessage = $"游戏 \"{gameName}\" 已删除";
+            var msg = deleteCloudSaves && !string.IsNullOrEmpty(gameToDelete.CloudConfigId)
+                ? $"游戏 \"{gameName}\" 及其云端存档已删除"
+                : $"游戏 \"{gameName}\" 已删除";
+            StatusMessage = msg;
             return (true, StatusMessage);
         }
         catch (Exception ex)
