@@ -25,6 +25,10 @@
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &gt;= 8">win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetFrameworkVersion('$(TargetFramework)')) &lt; 8">win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+
+        <!-- IL Trimming 配置: partial 模式仅裁剪外部库，保留项目自身代码 -->
+        <!-- WinUI 3 的 XAML 绑定系统依赖反射访问属性，full 模式会误裁剪导致白屏 -->
+        <TrimMode>partial</TrimMode>
     </PropertyGroup>
 
     <ItemGroup>
@@ -50,6 +54,13 @@
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
 
         <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+
+    <!-- 防止 WinRT COM 互操作相关程序集被裁剪 -->
+    <!-- WinUI 3 的 XAML 数据绑定依赖 WinRT.Runtime 中的 vtable 映射代码 -->
+    <ItemGroup>
+        <TrimmerRootAssembly Include="WinRT.Runtime" />
+        <TrimmerRootAssembly Include="Microsoft.WinUI" />
     </ItemGroup>
 
     <!-- 

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using GameSave.Models;
 
 namespace GameSave.Services;
@@ -135,7 +134,7 @@ public class CloudStorageService : IStorageService
                 var json = await provider.DownloadContentAsync($"{group.GameId}/game.json");
                 if (json != null)
                 {
-                    group.CloudGameMetadata = JsonSerializer.Deserialize<Game>(json, _jsonOptions);
+                    group.CloudGameMetadata = JsonSerializer.Deserialize(json, AppJsonContext.Default.Game);
                 }
             }
             catch
@@ -256,7 +255,7 @@ public class CloudStorageService : IStorageService
     /// <param name="game">游戏信息</param>
     public async Task UploadGameMetadataAsync(Game game)
     {
-        var json = JsonSerializer.Serialize(game, _jsonOptions);
+        var json = JsonSerializer.Serialize(game, AppJsonContext.Default.Game);
         var ossKey = $"{game.Id}/game.json";
 
         using var provider = CreateProvider();
@@ -275,7 +274,7 @@ public class CloudStorageService : IStorageService
         var json = await provider.DownloadContentAsync($"{gameId}/game.json");
         if (json == null) return null;
 
-        return JsonSerializer.Deserialize<Game>(json, _jsonOptions);
+        return JsonSerializer.Deserialize(json, AppJsonContext.Default.Game);
     }
 
     /// <summary>
@@ -317,12 +316,8 @@ public class CloudStorageService : IStorageService
         }
     }
 
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+
+
 
     /// <summary>
     /// 创建底层存储提供者实例

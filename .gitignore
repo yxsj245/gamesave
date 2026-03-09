@@ -48,6 +48,12 @@ _pkginfo.txt
 *.msix
 *.msixbundle
 
+# MSI 安装包构建产物
+installer-output/
+src/GameSave.Installer/HarvestedFiles.wxs
+*.msi
+*.wixpdb
+
 # Rider
 .idea/
 *.DotSettings.user

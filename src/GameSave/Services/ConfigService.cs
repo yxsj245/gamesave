@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using GameSave.Models;
 
 namespace GameSave.Services;
@@ -25,12 +24,8 @@ public class AppConfig
 /// </summary>
 public class ConfigService
 {
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+
+
 
     private AppConfig _config = new();
     private string _configFilePath = string.Empty;
@@ -66,7 +61,7 @@ public class ConfigService
         {
             // 加载已有配置
             var json = await File.ReadAllTextAsync(_configFilePath);
-            _config = JsonSerializer.Deserialize<AppConfig>(json, _jsonOptions) ?? new AppConfig();
+            _config = JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig) ?? new AppConfig();
             _config.WorkDirectory = defaultWorkDir;
         }
         else
@@ -85,7 +80,7 @@ public class ConfigService
     /// </summary>
     public async Task SaveConfigAsync()
     {
-        var json = JsonSerializer.Serialize(_config, _jsonOptions);
+        var json = JsonSerializer.Serialize(_config, AppJsonContext.Default.AppConfig);
         await File.WriteAllTextAsync(_configFilePath, json);
     }
 

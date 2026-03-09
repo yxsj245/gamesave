@@ -48,12 +48,14 @@ namespace GameSave
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
-                System.IO.File.WriteAllText("crash.log", e.ExceptionObject.ToString());
+                var logPath = Path.Combine(ConfigService.GetDefaultWorkDirectory(), "crash.log");
+                try { File.WriteAllText(logPath, $"[{DateTime.Now}]\n{e.ExceptionObject}"); } catch { }
             };
 
             Microsoft.UI.Xaml.Application.Current.UnhandledException += (s, e) =>
             {
-                System.IO.File.WriteAllText("xaml_crash.log", e.Exception.ToString());
+                var logPath = Path.Combine(ConfigService.GetDefaultWorkDirectory(), "xaml_crash.log");
+                try { File.WriteAllText(logPath, $"[{DateTime.Now}]\n{e.Exception}"); } catch { }
                 e.Handled = true;
             };
         }
