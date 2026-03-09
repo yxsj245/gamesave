@@ -19,7 +19,14 @@ namespace GameSave.Views
         protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
-            await ViewModel.InitializeAsync();
+            try
+            {
+                await ViewModel.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[HomePage] 初始化异常: {ex}");
+            }
             UpdateEmptyState();
         }
 
@@ -218,6 +225,21 @@ namespace GameSave.Views
             };
             panel.Children.Add(argsBox);
 
+            // 云端服务商（可选）
+            ComboBox? cloudConfigComboBox = null;
+            if (ViewModel.CloudConfigs.Count > 0)
+            {
+                cloudConfigComboBox = new ComboBox
+                {
+                    Header = "云端服务商（可选）",
+                    PlaceholderText = "不使用云端同步",
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                    DisplayMemberPath = "DisplayName"
+                };
+                cloudConfigComboBox.ItemsSource = ViewModel.CloudConfigs;
+                panel.Children.Add(cloudConfigComboBox);
+            }
+
             dialog.Content = panel;
 
             var result = await dialog.ShowAsync();
@@ -228,6 +250,16 @@ namespace GameSave.Views
                 ViewModel.NewGameSavePath = savePathBox.Text;
                 ViewModel.NewGameProcessPath = processPathBox.Text;
                 ViewModel.NewGameProcessArgs = argsBox.Text;
+
+                // 设置选中的云端配置 ID
+                if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
+                {
+                    ViewModel.SelectedCloudConfigId = selectedConfig.Id;
+                }
+                else
+                {
+                    ViewModel.SelectedCloudConfigId = null;
+                }
 
                 var success = await ViewModel.AddGameAsync();
                 if (success)

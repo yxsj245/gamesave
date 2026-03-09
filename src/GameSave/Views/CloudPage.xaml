@@ -6,14 +6,92 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    Loaded="Page_Loaded"
     mc:Ignorable="d">
 
     <Grid Padding="24">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部工具栏 -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="云端存档" FontSize="28" FontWeight="Bold" VerticalAlignment="Center"/>
+
+            <!-- 云端配置选择下拉框 -->
+            <ComboBox x:Name="CloudConfigComboBox"
+                      Grid.Column="1"
+                      Margin="24,0,0,0"
+                      MinWidth="200"
+                      VerticalAlignment="Center"
+                      DisplayMemberPath="DisplayName"
+                      SelectionChanged="CloudConfigComboBox_SelectionChanged"
+                      PlaceholderText="选择云端配置"/>
+
+            <!-- 刷新按钮 -->
+            <Button Grid.Column="2" Click="Refresh_Click" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE72C;" FontSize="14"/>
+                    <TextBlock Text="刷新"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- 无配置引导 -->
+        <StackPanel x:Name="NoConfigPanel"
+                    Grid.Row="1"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" 
+                    Spacing="16"
+                    Visibility="Collapsed">
             <FontIcon Glyph="&#xE753;" FontSize="64" Foreground="Gray" HorizontalAlignment="Center"/>
-            <TextBlock Text="云端存档" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="云端同步功能正在开发中，敬请期待..." 
+            <TextBlock Text="尚未配置云端存储" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+            <TextBlock Text="请前往「设置」页面添加云端存储配置（如阿里云 OSS）" 
                        FontSize="14" Foreground="Gray" HorizontalAlignment="Center"/>
+            <HyperlinkButton Content="前往设置 →" Click="GoToSettings_Click" HorizontalAlignment="Center"/>
         </StackPanel>
+
+        <!-- 加载中指示器 -->
+        <StackPanel x:Name="LoadingPanel"
+                    Grid.Row="1"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="12"
+                    Visibility="Collapsed">
+            <ProgressRing IsActive="True" Width="40" Height="40"/>
+            <TextBlock x:Name="LoadingText" Text="正在加载云端存档..." FontSize="14" Foreground="Gray" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- 空存档提示 -->
+        <StackPanel x:Name="EmptyPanel"
+                    Grid.Row="1"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="12"
+                    Visibility="Collapsed">
+            <FontIcon Glyph="&#xE7B8;" FontSize="48" Foreground="Gray" HorizontalAlignment="Center"/>
+            <TextBlock Text="云端暂无存档" FontSize="16" Foreground="Gray" HorizontalAlignment="Center"/>
+            <TextBlock Text="存档会在游戏退出或手动备份后自动上传" FontSize="13" Foreground="Gray" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- 云端存档列表（按游戏分组） -->
+        <ScrollViewer x:Name="ContentScrollViewer" Grid.Row="1" Visibility="Collapsed">
+            <ItemsRepeater x:Name="SaveGroupsRepeater" Margin="0,0,0,24">
+                <ItemsRepeater.Layout>
+                    <StackLayout Spacing="16"/>
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+        </ScrollViewer>
+
+        <!-- 底部状态栏 -->
+        <TextBlock x:Name="StatusText" 
+                   Grid.Row="1" 
+                   VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                   FontSize="12" Foreground="Gray"
+                   Margin="0,0,0,4"/>
     </Grid>
 </Page>

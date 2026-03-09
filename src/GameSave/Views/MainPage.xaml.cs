@@ -11,6 +11,9 @@ namespace GameSave.Views
         // Win32 API 用于窗口最小化/恢复
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        private const int SW_SHOW = 5;
         private const int SW_MINIMIZE = 6;
         private const int SW_RESTORE = 9;
 
@@ -93,6 +96,20 @@ namespace GameSave.Views
                         RestoreWindow();
                         break;
 
+                    case GameRunStatus.Uploading:
+                        // 正在上传到云端 — 显示上传进度
+                        StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        StatusBarIcon.Glyph = "\uE753"; // 云端图标
+                        StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                            Microsoft.UI.Colors.DodgerBlue);
+                        StatusBarText.Text = $"☁️ 正在上传 {e.GameName} 存档到云端...";
+                        StatusBarDetail.Text = "请勿关闭软件";
+                        StatusBarProgress.IsActive = true;
+
+                        StatusNavItem.Content = "正在上传...";
+                        StatusIcon.Glyph = "\uE753";
+                        break;
+
                     case GameRunStatus.Completed:
                         // 备份完成 — 显示完成状态
                         StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
@@ -134,7 +151,7 @@ namespace GameSave.Views
         }
 
         /// <summary>
-        /// 恢复主窗口显示
+        /// 恢复主窗口显示（支持从最小化和托盘隐藏状态恢复）
         /// </summary>
         public static void RestoreWindow()
         {
@@ -142,7 +159,9 @@ namespace GameSave.Views
             if (window != null)
             {
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-                ShowWindow(hwnd, SW_RESTORE);
+                ShowWindow(hwnd, SW_SHOW);    // 先确保窗口可见（从隐藏状态恢复）
+                ShowWindow(hwnd, SW_RESTORE); // 从最小化状态恢复正常大小
+                SetForegroundWindow(hwnd);    // 激活窗口到前台
             }
         }
     }

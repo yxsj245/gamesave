@@ -16,6 +16,8 @@ public enum GameRunStatus
     Running,
     /// <summary>正在备份</summary>
     BackingUp,
+    /// <summary>正在上传到云端</summary>
+    Uploading,
     /// <summary>完成</summary>
     Completed
 }
@@ -177,18 +179,25 @@ public class GameService
             });
 
             // 进程退出后自动备份
+            SaveFile? save = null;
             try
             {
                 if (Directory.Exists(game.SaveFolderPath) &&
                     Directory.EnumerateFiles(game.SaveFolderPath, "*", SearchOption.AllDirectories).Any())
                 {
-                    var save = await _localStorageService.CreateExitSaveAsync(game);
+                    save = await _localStorageService.CreateExitSaveAsync(game);
                     BackupCompleted?.Invoke(this, save);
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"自动备份失败: {ex.Message}");
+            }
+
+            // 备份完成后，检测是否需要上传到云端
+            if (save != null)
+            {
+                await TryUploadToCloudAsync(game, save);
             }
 
             // 通知：完成
@@ -222,6 +231,10 @@ public class GameService
         var name = string.IsNullOrWhiteSpace(saveName) ? "手动存档" : saveName;
         var save = await _localStorageService.BackupSaveAsync(game, name);
         BackupCompleted?.Invoke(this, save);
+
+        // 手动备份完成后，也尝试上传到云端
+        await TryUploadToCloudAsync(game, save);
+
         return save;
     }
 
@@ -284,6 +297,40 @@ public class GameService
         foreach (var dir in di.EnumerateDirectories())
         {
             dir.Delete(true);
+        }
+    }
+
+    /// <summary>
+    /// 尝试将存档上传到云端（若游戏已关联云端配置）
+    /// </summary>
+    private async Task TryUploadToCloudAsync(Game game, SaveFile save)
+    {
+        if (string.IsNullOrEmpty(game.CloudConfigId))
+            return;
+
+        var cloudConfig = _configService.GetCloudConfigById(game.CloudConfigId);
+        if (cloudConfig == null || !cloudConfig.IsEnabled)
+            return;
+
+        try
+        {
+            // 通知：正在上传
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Uploading,
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = $"正在上传 {game.Name} 存档到云端..."
+            });
+
+            var cloudService = new CloudStorageService(cloudConfig, _configService);
+            await cloudService.UploadSaveFileAsync(save, game);
+
+            System.Diagnostics.Debug.WriteLine($"[云端同步] {game.Name} 存档已上传到 {cloudConfig.DisplayName}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[云端同步] 上传失败: {ex.Message}");
         }
     }
 }

@@ -160,6 +160,17 @@ public class ConfigService
         await SaveConfigAsync();
     }
 
+    /// <summary>更新云存储配置</summary>
+    public async Task UpdateCloudConfigAsync(CloudConfig config)
+    {
+        var index = _config.CloudConfigs.FindIndex(c => c.Id == config.Id);
+        if (index >= 0)
+        {
+            _config.CloudConfigs[index] = config;
+            await SaveConfigAsync();
+        }
+    }
+
     /// <summary>删除云存储配置</summary>
     public async Task RemoveCloudConfigAsync(string configId)
     {

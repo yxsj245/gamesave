@@ -114,6 +114,22 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _newGameProcessArgs, value);
     }
 
+    // 云端服务商配置列表（供添加游戏表单下拉框使用）
+    private ObservableCollection<CloudConfig> _cloudConfigs = new();
+    public ObservableCollection<CloudConfig> CloudConfigs
+    {
+        get => _cloudConfigs;
+        set => SetProperty(ref _cloudConfigs, value);
+    }
+
+    // 添加游戏时选中的云端配置 ID
+    private string? _selectedCloudConfigId;
+    public string? SelectedCloudConfigId
+    {
+        get => _selectedCloudConfigId;
+        set => SetProperty(ref _selectedCloudConfigId, value);
+    }
+
     // 手动备份名称
     private string _manualSaveName = string.Empty;
     public string ManualSaveName
@@ -133,6 +149,7 @@ public partial class MainViewModel : BaseViewModel
     {
         await _configService.InitializeAsync();
         LoadGamesFromConfig();
+        LoadCloudConfigs();
     }
 
     private void LoadGamesFromConfig()
@@ -141,6 +158,18 @@ public partial class MainViewModel : BaseViewModel
         foreach (var game in _configService.GetAllGames())
         {
             Games.Add(game);
+        }
+    }
+
+    /// <summary>
+    /// 加载云端配置列表（供添加游戏表单的下拉框使用）
+    /// </summary>
+    public void LoadCloudConfigs()
+    {
+        CloudConfigs.Clear();
+        foreach (var config in _configService.GetAllCloudConfigs())
+        {
+            CloudConfigs.Add(config);
         }
     }
 
@@ -201,6 +230,7 @@ public partial class MainViewModel : BaseViewModel
         NewGameSavePath = string.Empty;
         NewGameProcessPath = string.Empty;
         NewGameProcessArgs = string.Empty;
+        SelectedCloudConfigId = null;
     }
 
     /// <summary>
@@ -231,6 +261,7 @@ public partial class MainViewModel : BaseViewModel
                 SaveFolderPath = NewGameSavePath.Trim(),
                 ProcessPath = string.IsNullOrWhiteSpace(NewGameProcessPath) ? null : NewGameProcessPath.Trim(),
                 ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
+                CloudConfigId = SelectedCloudConfigId,
                 IconPath = "\uE7FC"
             };
 
