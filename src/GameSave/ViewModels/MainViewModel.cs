@@ -1,15 +1,33 @@
 ﻿using System.Collections.ObjectModel;
 using GameSave.Models;
+using GameSave.Services;
 
 namespace GameSave.ViewModels;
 
 public partial class MainViewModel : BaseViewModel
 {
+    private readonly ConfigService _configService;
+    private readonly LocalStorageService _localStorageService;
+    private readonly GameService _gameService;
+
     public MainViewModel()
     {
-        Title = "Home";
-        LoadMockData();
+        Title = "我的游戏";
+        _configService = App.ConfigService;
+        _localStorageService = App.LocalStorageService;
+        _gameService = App.GameService;
+
+        // 监听游戏退出事件，刷新存档列表
+        _gameService.GameExited += async (_, gameId) =>
+        {
+            if (SelectedGame?.Id == gameId)
+            {
+                await LoadSavesForGameAsync(gameId);
+            }
+        };
     }
+
+    #region 属性
 
     private ObservableCollection<Game> _games = new();
     public ObservableCollection<Game> Games
@@ -53,69 +71,365 @@ public partial class MainViewModel : BaseViewModel
 
     public Microsoft.UI.Xaml.Visibility DetailsVisibility => IsDetailsVisible ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
-    private void OnSelectedGameChanged(Game? value)
+    private bool _isBusy;
+    public bool IsBusy
+    {
+        get => _isBusy;
+        set => SetProperty(ref _isBusy, value);
+    }
+
+    private string _statusMessage = string.Empty;
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        set => SetProperty(ref _statusMessage, value);
+    }
+
+    // 添加游戏表单字段
+    private string _newGameName = string.Empty;
+    public string NewGameName
+    {
+        get => _newGameName;
+        set => SetProperty(ref _newGameName, value);
+    }
+
+    private string _newGameSavePath = string.Empty;
+    public string NewGameSavePath
+    {
+        get => _newGameSavePath;
+        set => SetProperty(ref _newGameSavePath, value);
+    }
+
+    private string _newGameProcessPath = string.Empty;
+    public string NewGameProcessPath
+    {
+        get => _newGameProcessPath;
+        set => SetProperty(ref _newGameProcessPath, value);
+    }
+
+    private string _newGameProcessArgs = string.Empty;
+    public string NewGameProcessArgs
+    {
+        get => _newGameProcessArgs;
+        set => SetProperty(ref _newGameProcessArgs, value);
+    }
+
+    // 手动备份名称
+    private string _manualSaveName = string.Empty;
+    public string ManualSaveName
+    {
+        get => _manualSaveName;
+        set => SetProperty(ref _manualSaveName, value);
+    }
+
+    #endregion
+
+    #region 初始化
+
+    /// <summary>
+    /// 初始化：从配置加载真实游戏列表
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        await _configService.InitializeAsync();
+        LoadGamesFromConfig();
+    }
+
+    private void LoadGamesFromConfig()
+    {
+        Games.Clear();
+        foreach (var game in _configService.GetAllGames())
+        {
+            Games.Add(game);
+        }
+    }
+
+    #endregion
+
+    #region 游戏选择
+
+    private async void OnSelectedGameChanged(Game? value)
     {
         CurrentSaves.Clear();
 
         if (value != null)
         {
-            // 选中的游戏改变时，生成一些模拟存档记录
-            var random = new Random();
-            int saveCount = random.Next(2, 6);
-            for (int i = 0; i < saveCount; i++)
-            {
-                CurrentSaves.Add(new SaveFile
-                {
-                    Name = $"Save {i + 1}",
-                    BackupTime = DateTime.Now.AddDays(-i).AddHours(random.Next(-5, 5)),
-                    SizeBytes = random.Next(1024 * 1024 * 5, 1024 * 1024 * 50),
-                    Description = i == 0 ? "打败了女武神" : "开局存档",
-                    StorageType = i % 2 == 0 ? StorageType.Local : StorageType.Cloud
-                });
-            }
-            // 展现详情界面
+            await LoadSavesForGameAsync(value.Id);
             IsDetailsVisible = true;
         }
         else
         {
-            // 如果清空了选择，则隐藏详情
             IsDetailsVisible = false;
         }
     }
 
-    // 后台代码处理关闭
+    private async Task LoadSavesForGameAsync(string gameId)
+    {
+        try
+        {
+            var saves = await _localStorageService.GetSavesAsync(gameId);
+
+            // 需要在 UI 线程更新
+            CurrentSaves.Clear();
+            foreach (var save in saves)
+            {
+                CurrentSaves.Add(save);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"加载存档失败: {ex.Message}";
+        }
+    }
+
     public void CloseDetails()
     {
         IsDetailsVisible = false;
         SelectedGame = null;
     }
 
-    private void LoadMockData()
+    #endregion
+
+    #region 添加游戏
+
+    /// <summary>
+    /// 重置添加游戏表单
+    /// </summary>
+    public void ResetAddGameForm()
     {
-        Games.Add(new Game
-        {
-            Name = "ELDEN RING",
-            SaveFolderPath = @"C:\Users\Admin\AppData\Roaming\EldenRing",
-            IconPath = "\uE7FC" // 用一个默认符号占位
-        });
-
-        Games.Add(new Game
-        {
-            Name = "Cyberpunk 2077",
-            SaveFolderPath = @"C:\Users\Admin\Saved Games\CD Projekt Red\Cyberpunk 2077",
-            IconPath = "\uE7FC"
-        });
-
-        Games.Add(new Game
-        {
-            Name = "Baldur's Gate 3",
-            SaveFolderPath = @"C:\Users\Admin\AppData\Local\Larian Studios\Baldur's Gate 3\PlayerProfiles\Public\Savegames\Story",
-            IconPath = "\uE7FC"
-        });
-
-        // if (Games.Count > 0)
-        // {
-        //     SelectedGame = Games[0]; // 默认不选中
-        // }
+        NewGameName = string.Empty;
+        NewGameSavePath = string.Empty;
+        NewGameProcessPath = string.Empty;
+        NewGameProcessArgs = string.Empty;
     }
+
+    /// <summary>
+    /// 执行添加游戏操作
+    /// </summary>
+    public async Task<bool> AddGameAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewGameName))
+        {
+            StatusMessage = "请输入游戏名称";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(NewGameSavePath))
+        {
+            StatusMessage = "请选择游戏存档目录";
+            return false;
+        }
+
+        IsBusy = true;
+        StatusMessage = "正在添加游戏...";
+
+        try
+        {
+            var game = new Game
+            {
+                Name = NewGameName.Trim(),
+                SaveFolderPath = NewGameSavePath.Trim(),
+                ProcessPath = string.IsNullOrWhiteSpace(NewGameProcessPath) ? null : NewGameProcessPath.Trim(),
+                ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
+                IconPath = "\uE7FC"
+            };
+
+            await _gameService.AddGameAsync(game);
+            Games.Add(game);
+
+            ResetAddGameForm();
+            StatusMessage = $"游戏 \"{game.Name}\" 添加成功！";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"添加游戏失败: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
+    #region 启动游戏
+
+    /// <summary>
+    /// 启动选中的游戏
+    /// </summary>
+    public async Task<(bool success, string message)> LaunchGameAsync()
+    {
+        if (SelectedGame == null)
+            return (false, "请先选择一个游戏");
+
+        if (string.IsNullOrWhiteSpace(SelectedGame.ProcessPath))
+            return (false, "该游戏未设置启动进程路径");
+
+        IsBusy = true;
+        StatusMessage = "正在启动游戏...";
+
+        try
+        {
+            var result = await _gameService.LaunchGameAsync(SelectedGame);
+            StatusMessage = result ? "游戏已启动，退出后将自动备份" : "启动取消";
+            return (result, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"启动游戏失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
+    #region 手动备份
+
+    /// <summary>
+    /// 执行手动备份
+    /// </summary>
+    public async Task<(bool success, string message)> ManualBackupAsync()
+    {
+        if (SelectedGame == null)
+            return (false, "请先选择一个游戏");
+
+        IsBusy = true;
+        StatusMessage = "正在备份存档...";
+
+        try
+        {
+            var name = string.IsNullOrWhiteSpace(ManualSaveName) ? "手动存档" : ManualSaveName.Trim();
+            var save = await _gameService.ManualBackupAsync(SelectedGame, name);
+
+            // 刷新存档列表
+            await LoadSavesForGameAsync(SelectedGame.Id);
+
+            ManualSaveName = string.Empty;
+            StatusMessage = $"存档 \"{save.Name}\" 备份成功！";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"备份失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
+    #region 恢复存档
+
+    /// <summary>
+    /// 恢复指定存档
+    /// </summary>
+    public async Task<(bool success, string message)> RestoreSaveAsync(SaveFile saveFile, bool force = false)
+    {
+        if (SelectedGame == null)
+            return (false, "请先选择一个游戏");
+
+        IsBusy = true;
+        StatusMessage = "正在恢复存档...";
+
+        try
+        {
+            await _gameService.RestoreSaveAsync(SelectedGame, saveFile, force);
+            StatusMessage = $"存档 \"{saveFile.Name}\" 恢复成功！";
+            return (true, StatusMessage);
+        }
+        catch (GameRunningException)
+        {
+            // 需要用户二次确认，抛出给 UI 层处理
+            throw;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"恢复失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
+    #region 删除存档
+
+    /// <summary>
+    /// 删除指定存档
+    /// </summary>
+    public async Task<(bool success, string message)> DeleteSaveAsync(SaveFile saveFile)
+    {
+        if (!saveFile.CanDelete)
+            return (false, "退出存档不允许删除");
+
+        IsBusy = true;
+
+        try
+        {
+            await _localStorageService.DeleteSaveAsync(saveFile);
+            CurrentSaves.Remove(saveFile);
+            StatusMessage = $"存档 \"{saveFile.Name}\" 已删除";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"删除失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
+    #region 删除游戏
+
+    /// <summary>
+    /// 删除选中的游戏
+    /// </summary>
+    public async Task<(bool success, string message)> DeleteGameAsync()
+    {
+        if (SelectedGame == null)
+            return (false, "请先选择一个游戏");
+
+        IsBusy = true;
+
+        try
+        {
+            var gameName = SelectedGame.Name;
+            var gameToDelete = SelectedGame;
+
+            CloseDetails();
+            Games.Remove(gameToDelete);
+            await _gameService.DeleteGameAsync(gameToDelete);
+
+            StatusMessage = $"游戏 \"{gameName}\" 已删除";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"删除游戏失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
 }
