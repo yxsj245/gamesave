@@ -182,6 +182,31 @@ public class CloudStorageService : IStorageService
         var ossKey = $"{game.Id}/{tarFileName}";
 
         using var provider = CreateProvider();
+
+        // 退出存档走替换策略：上传前先删除云端已有的旧退出存档，只保留一份
+        if (localSaveFile.Tag == SaveTag.ExitSave)
+        {
+            try
+            {
+                var prefix = $"{game.Id}/";
+                var existingObjects = await provider.ListObjectsAsync(prefix);
+                foreach (var obj in existingObjects)
+                {
+                    // 匹配旧的退出存档文件（格式: {gameId}/{timestamp}_退出存档.tar）
+                    if (obj.Key.EndsWith("_退出存档.tar", StringComparison.OrdinalIgnoreCase) && obj.Key != ossKey)
+                    {
+                        await provider.DeleteObjectAsync(obj.Key);
+                        System.Diagnostics.Debug.WriteLine($"[云端] 已删除旧退出存档: {obj.Key}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 删除旧存档失败不影响新存档上传
+                System.Diagnostics.Debug.WriteLine($"[云端] 清理旧退出存档失败: {ex.Message}");
+            }
+        }
+
         await provider.UploadFileAsync(localSaveFile.Path, ossKey, progress);
 
         var fileInfo = new FileInfo(localSaveFile.Path);
