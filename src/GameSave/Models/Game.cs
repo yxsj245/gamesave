@@ -20,6 +20,8 @@ public class Game
     /// <summary>添加时间</summary>
     public DateTime AddedAt { get; set; } = DateTime.Now;
 
+    public string DisplayAddedAt => AddedAt.ToString("yyyy/MM/dd");
+
     /// <summary>备注</summary>
     public string? Notes { get; set; }
 }

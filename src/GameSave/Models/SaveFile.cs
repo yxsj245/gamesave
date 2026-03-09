@@ -20,11 +20,15 @@ public class SaveFile
     /// <summary>备份时间</summary>
     public DateTime BackupTime { get; set; } = DateTime.Now;
 
+    public string DisplayBackupTime => BackupTime.ToString("g");
+
     /// <summary>文件大小（字节）</summary>
     public long SizeBytes { get; set; }
 
     /// <summary>存储类型：Local / Cloud</summary>
     public StorageType StorageType { get; set; } = StorageType.Local;
+
+    public string DisplayStorageType => StorageType.ToString();
 
     /// <summary>描述/备注</summary>
     public string? Description { get; set; }
