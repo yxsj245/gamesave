@@ -195,29 +195,33 @@ public class GameService
             }
 
             // 备份完成后，检测是否需要上传到云端
+            bool uploaded = false;
             if (save != null)
             {
-                await TryUploadToCloudAsync(game, save);
+                uploaded = await TryUploadToCloudAsync(game, save);
             }
 
-            // 通知：完成
-            StatusChanged?.Invoke(this, new GameStatusInfo
+            // 如果没有上传到云端，则手动发送完成状态
+            if (!uploaded)
             {
-                Status = GameRunStatus.Completed,
-                GameName = game.Name,
-                GameId = game.Id,
-                Message = $"游戏 {game.Name} 存档备份完成"
-            });
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Completed,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = $"游戏 {game.Name} 存档备份完成"
+                });
+
+                // 短暂延迟后恢复空闲
+                await Task.Delay(3000);
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Idle,
+                    Message = "同步就绪"
+                });
+            }
 
             GameExited?.Invoke(this, game.Id);
-
-            // 短暂延迟后恢复空闲
-            await Task.Delay(3000);
-            StatusChanged?.Invoke(this, new GameStatusInfo
-            {
-                Status = GameRunStatus.Idle,
-                Message = "同步就绪"
-            });
         });
 
         return true;
@@ -232,8 +236,18 @@ public class GameService
         var save = await _localStorageService.BackupSaveAsync(game, name);
         BackupCompleted?.Invoke(this, save);
 
-        // 手动备份完成后，也尝试上传到云端
-        await TryUploadToCloudAsync(game, save);
+        // 手动备份完成后，后台上传到云端（不阻塞备份结果返回）
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await TryUploadToCloudAsync(game, save);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[手动备份] 云端上传异常: {ex.Message}");
+            }
+        });
 
         return save;
     }
@@ -303,14 +317,14 @@ public class GameService
     /// <summary>
     /// 尝试将存档上传到云端（若游戏已关联云端配置）
     /// </summary>
-    private async Task TryUploadToCloudAsync(Game game, SaveFile save)
+    private async Task<bool> TryUploadToCloudAsync(Game game, SaveFile save)
     {
         if (string.IsNullOrEmpty(game.CloudConfigId))
-            return;
+            return false;
 
         var cloudConfig = _configService.GetCloudConfigById(game.CloudConfigId);
         if (cloudConfig == null || !cloudConfig.IsEnabled)
-            return;
+            return false;
 
         try
         {
@@ -327,10 +341,38 @@ public class GameService
             await cloudService.UploadSaveFileAsync(save, game);
 
             System.Diagnostics.Debug.WriteLine($"[云端同步] {game.Name} 存档已上传到 {cloudConfig.DisplayName}");
+
+            // 通知：上传完成
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Completed,
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = $"☁️ {game.Name} 存档已同步到云端"
+            });
+
+            // 短暂延迟后恢复空闲
+            await Task.Delay(3000);
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Idle,
+                Message = "同步就绪"
+            });
+
+            return true;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[云端同步] 上传失败: {ex.Message}");
+
+            // 上传失败也恢复空闲状态
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Idle,
+                Message = $"云端同步失败: {ex.Message}"
+            });
+
+            return false;
         }
     }
 }

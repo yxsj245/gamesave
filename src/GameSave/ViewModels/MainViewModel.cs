@@ -330,16 +330,19 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedGame == null)
             return (false, "请先选择一个游戏");
 
+        // 捕获当前选中游戏的引用（避免 await 期间 SelectedGame 变为 null）
+        var game = SelectedGame;
+
         IsBusy = true;
         StatusMessage = "正在备份存档...";
 
         try
         {
             var name = string.IsNullOrWhiteSpace(ManualSaveName) ? "手动存档" : ManualSaveName.Trim();
-            var save = await _gameService.ManualBackupAsync(SelectedGame, name);
+            var save = await _gameService.ManualBackupAsync(game, name);
 
             // 刷新存档列表
-            await LoadSavesForGameAsync(SelectedGame.Id);
+            await LoadSavesForGameAsync(game.Id);
 
             ManualSaveName = string.Empty;
             StatusMessage = $"存档 \"{save.Name}\" 备份成功！";
