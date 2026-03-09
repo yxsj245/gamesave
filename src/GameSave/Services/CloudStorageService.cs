@@ -288,6 +288,20 @@ public class CloudStorageService : IStorageService
     }
 
     /// <summary>
+    /// 删除云端上整个游戏的所有数据（包括所有存档和 game.json 元数据）
+    /// </summary>
+    /// <param name="gameId">游戏 ID</param>
+    /// <returns>成功删除的对象数量</returns>
+    public async Task<int> DeleteGameAsync(string gameId)
+    {
+        using var provider = CreateProvider();
+        var prefix = $"{gameId}/";
+        var deletedCount = await provider.DeleteObjectsByPrefixAsync(prefix);
+        System.Diagnostics.Debug.WriteLine($"[云端] 已删除游戏 {gameId} 的全部云端数据，共 {deletedCount} 个对象");
+        return deletedCount;
+    }
+
+    /// <summary>
     /// 测试云端连接
     /// </summary>
     public async Task<(bool success, string message)> TestConnectionAsync()

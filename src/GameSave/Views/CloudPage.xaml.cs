@@ -171,7 +171,14 @@ namespace GameSave.Views
                 Grid.SetColumn(leftPanel, 0);
                 headerPanel.Children.Add(leftPanel);
 
-                // 右侧：本地不存在时显示"导入恢复"按钮
+                // 右侧：操作按钮区域（导入恢复 + 删除整个游戏）
+                var rightPanel = new StackPanel
+                {
+                    Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                    Spacing = 6,
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                };
+
                 if (!group.IsLocalGameExists && group.CloudGameMetadata != null)
                 {
                     var importBtn = new Button
@@ -187,13 +194,10 @@ namespace GameSave.Views
                             }
                         },
                         Style = (Microsoft.UI.Xaml.Style)Application.Current.Resources["AccentButtonStyle"],
-                        Tag = group,
-                        VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                        Tag = group
                     };
                     importBtn.Click += ImportGame_Click;
-
-                    Grid.SetColumn(importBtn, 1);
-                    headerPanel.Children.Add(importBtn);
+                    rightPanel.Children.Add(importBtn);
                 }
                 else if (!group.IsLocalGameExists)
                 {
@@ -205,9 +209,42 @@ namespace GameSave.Views
                         Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed),
                         VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
                     };
-                    Grid.SetColumn(hintText, 1);
-                    headerPanel.Children.Add(hintText);
+                    rightPanel.Children.Add(hintText);
                 }
+
+                // 删除整个游戏按钮
+                var deleteGameBtn = new Button
+                {
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
+                    Content = new StackPanel
+                    {
+                        Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                        Spacing = 4,
+                        Children =
+                        {
+                            new FontIcon
+                            {
+                                Glyph = "\uE74D",
+                                FontSize = 13,
+                                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed)
+                            },
+                            new TextBlock
+                            {
+                                Text = "删除整个游戏",
+                                FontSize = 12,
+                                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed)
+                            }
+                        }
+                    },
+                    Tag = group
+                };
+                ToolTipService.SetToolTip(deleteGameBtn, "删除该游戏在云端的所有存档和元数据");
+                deleteGameBtn.Click += DeleteGameFromCloud_Click;
+                rightPanel.Children.Add(deleteGameBtn);
+
+                Grid.SetColumn(rightPanel, 1);
+                headerPanel.Children.Add(rightPanel);
 
                 cardContent.Children.Add(headerPanel);
 
@@ -454,6 +491,46 @@ namespace GameSave.Views
                     XamlRoot = this.XamlRoot
                 };
                 await dialog.ShowAsync();
+            }
+        }
+
+        /// <summary>
+        /// 删除云端上整个游戏的所有数据
+        /// </summary>
+        private async void DeleteGameFromCloud_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is CloudSaveGroup group)
+            {
+                var confirmDialog = new ContentDialog
+                {
+                    Title = "确认删除整个游戏",
+                    Content = $"确定要删除游戏「{group.GameName}」在云端的所有数据吗？\n\n这将删除该游戏的全部存档（{group.Saves.Count} 个）和元数据，此操作不可撤销！",
+                    PrimaryButtonText = "全部删除",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = this.XamlRoot
+                };
+
+                var result = await confirmDialog.ShowAsync();
+                if (result == ContentDialogResult.Primary)
+                {
+                    var (success, message) = await ViewModel.DeleteGameFromCloudAsync(group);
+
+                    if (success)
+                    {
+                        // 重新构建 UI
+                        if (ViewModel.SaveGroups.Count == 0)
+                        {
+                            ShowEmptyState();
+                        }
+                        else
+                        {
+                            BuildSaveGroupsUI();
+                        }
+                    }
+
+                    StatusText.Text = message;
+                }
             }
         }
 

@@ -1,11 +1,14 @@
 using System.Text.Json.Serialization;
 
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace GameSave.Models;
 
 /// <summary>
 /// 游戏信息模型
 /// </summary>
-public class Game
+public class Game : INotifyPropertyChanged
 {
     /// <summary>游戏唯一ID</summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -37,4 +40,27 @@ public class Game
 
     /// <summary>备注</summary>
     public string? Notes { get; set; }
+
+    private bool _isRunning;
+    /// <summary>指示游戏当前是否正在运行</summary>
+    [JsonIgnore]
+    public bool IsRunning
+    {
+        get => _isRunning;
+        set
+        {
+            if (_isRunning != value)
+            {
+                _isRunning = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }

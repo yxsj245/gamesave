@@ -216,6 +216,26 @@ public class OssStorageProvider : IDisposable
     }
 
     /// <summary>
+    /// 删除指定前缀下的所有对象（用于删除整个游戏目录）
+    /// </summary>
+    /// <param name="prefix">前缀（不含 basePath，如 gameId/）</param>
+    /// <returns>成功删除的对象数量</returns>
+    public async Task<int> DeleteObjectsByPrefixAsync(string prefix)
+    {
+        var objects = await ListObjectsAsync(prefix);
+        int deletedCount = 0;
+
+        foreach (var obj in objects)
+        {
+            await DeleteObjectAsync(obj.Key);
+            deletedCount++;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[OSS] 已删除前缀 {prefix} 下共 {deletedCount} 个对象");
+        return deletedCount;
+    }
+
+    /// <summary>
     /// 测试 OSS 连接是否正常
     /// </summary>
     /// <returns>连接成功返回 true</returns>

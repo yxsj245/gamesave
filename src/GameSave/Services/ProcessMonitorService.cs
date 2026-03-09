@@ -82,4 +82,32 @@ public class ProcessMonitorService
         var processes = Process.GetProcessesByName(processName);
         return processes.Length > 0;
     }
+
+    /// <summary>
+    /// 根据进程 ID 结束进程
+    /// </summary>
+    /// <param name="processId">进程ID</param>
+    public static void StopProcess(int processId)
+    {
+        try
+        {
+            var process = Process.GetProcessById(processId);
+            if (!process.HasExited)
+            {
+                process.Kill(true); // 递归结束进程树
+            }
+        }
+        catch (ArgumentException)
+        {
+            // 进程可能已经退出，引发异常可忽略
+        }
+        catch (InvalidOperationException)
+        {
+            // 同上
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"结束进程失败 PID={processId}: {ex.Message}");
+        }
+    }
 }

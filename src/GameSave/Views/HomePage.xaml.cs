@@ -66,41 +66,98 @@ namespace GameSave.Views
 
         #endregion
 
-        #region 游戏卡片交互
+        #region 游戏列表项交互
 
-        private void GameCard_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void GameListItem_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
-            if (sender is Microsoft.UI.Xaml.UIElement element)
+            if (sender is FrameworkElement element)
             {
-                var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
-                var compositor = visual.Compositor;
-                var animation = compositor.CreateVector3KeyFrameAnimation();
-                animation.InsertKeyFrame(1f, new System.Numerics.Vector3(1.05f, 1.05f, 1f));
-                animation.Duration = TimeSpan.FromMilliseconds(200);
-                visual.CenterPoint = new System.Numerics.Vector3((float)element.ActualSize.X / 2, (float)element.ActualSize.Y / 2, 0);
-                visual.StartAnimation("Scale", animation);
+                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
+                if (glowRect != null)
+                {
+                    glowRect.Opacity = 1;
+                }
             }
         }
 
-        private void GameCard_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void GameListItem_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
-            if (sender is Microsoft.UI.Xaml.UIElement element)
+            if (sender is FrameworkElement element)
             {
-                var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
-                var compositor = visual.Compositor;
-                var animation = compositor.CreateVector3KeyFrameAnimation();
-                animation.InsertKeyFrame(1f, new System.Numerics.Vector3(1f, 1f, 1f));
-                animation.Duration = TimeSpan.FromMilliseconds(200);
-                visual.CenterPoint = new System.Numerics.Vector3((float)element.ActualSize.X / 2, (float)element.ActualSize.Y / 2, 0);
-                visual.StartAnimation("Scale", animation);
+                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
+                if (glowRect != null)
+                {
+                    glowRect.Opacity = 0;
+                }
             }
         }
 
-        private void GamesGridView_ItemClick(object sender, Microsoft.UI.Xaml.Controls.ItemClickEventArgs e)
+        private void GameListItem_PointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
-            if (e.ClickedItem is Game game)
+            if (sender is FrameworkElement element)
+            {
+                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
+                var glowBrush = element.FindName("GlowBrush") as Microsoft.UI.Xaml.Media.RadialGradientBrush;
+
+                if (glowRect != null && glowBrush != null)
+                {
+                    var pointerPosition = e.GetCurrentPoint(element).Position;
+                    // Calculate relative position based on item size
+                    double xRelative = pointerPosition.X / element.ActualWidth;
+                    double yRelative = pointerPosition.Y / element.ActualHeight;
+
+                    glowBrush.Center = new Windows.Foundation.Point(xRelative, yRelative);
+                    glowBrush.GradientOrigin = new Windows.Foundation.Point(xRelative, yRelative);
+                }
+            }
+        }
+
+        private void GamesList_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            // 检查点击源是否来自按钮控件（启动/停止按钮），如果是则不打开详情页
+            var source = e.OriginalSource as DependencyObject;
+            while (source != null && !ReferenceEquals(source, sender))
+            {
+                if (source is Button)
+                {
+                    // 点击来自按钮，不打开详情面板
+                    return;
+                }
+                source = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(source);
+            }
+
+            if (e.OriginalSource is FrameworkElement originalElement && originalElement.DataContext is Game game)
             {
                 ViewModel.SelectedGame = game;
+            }
+        }
+
+        private async void ListItemLaunchGame_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is Game game)
+            {
+                if (game.IsRunning)
+                {
+                    // 停止游戏 - 需要先设置 SelectedGame 才能让 StopGame 找到对应游戏
+                    var previousSelected = ViewModel.SelectedGame;
+                    // 临时保存之前的选中状态，避免触发详情面板
+                    ViewModel.StopGameDirect(game);
+                }
+                else
+                {
+                    // 启动游戏
+                    if (string.IsNullOrWhiteSpace(game.ProcessPath))
+                    {
+                        await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                        return;
+                    }
+
+                    var (success, message) = await ViewModel.LaunchGameDirectAsync(game);
+                    if (!success)
+                    {
+                        await ShowMessageAsync("启动失败", message);
+                    }
+                }
             }
         }
 

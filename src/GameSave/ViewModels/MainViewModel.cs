@@ -346,6 +346,56 @@ public partial class MainViewModel : BaseViewModel
     #region 手动备份
 
     /// <summary>
+    /// 停止选中的游戏
+    /// </summary>
+    public void StopGame()
+    {
+        if (_gameService.IsGameRunning && _gameService.RunningProcessId != 0 && SelectedGame != null && _gameService.RunningGameId == SelectedGame.Id)
+        {
+            ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
+        }
+    }
+
+    /// <summary>
+    /// 直接停止指定游戏（不触发详情面板），供列表按钮使用
+    /// </summary>
+    public void StopGameDirect(Game game)
+    {
+        if (_gameService.IsGameRunning && _gameService.RunningProcessId != 0 && _gameService.RunningGameId == game.Id)
+        {
+            ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
+        }
+    }
+
+    /// <summary>
+    /// 直接启动指定游戏（不触发详情面板），供列表按钮使用
+    /// </summary>
+    public async Task<(bool success, string message)> LaunchGameDirectAsync(Game game)
+    {
+        if (string.IsNullOrWhiteSpace(game.ProcessPath))
+            return (false, "该游戏未设置启动进程路径");
+
+        IsBusy = true;
+        StatusMessage = "正在启动游戏...";
+
+        try
+        {
+            var result = await _gameService.LaunchGameAsync(game);
+            StatusMessage = result ? "游戏已启动，退出后将自动备份" : "启动取消";
+            return (result, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"启动游戏失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
     /// 执行手动备份
     /// </summary>
     public async Task<(bool success, string message)> ManualBackupAsync()

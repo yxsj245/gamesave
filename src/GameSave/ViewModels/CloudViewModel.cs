@@ -381,6 +381,39 @@ public partial class CloudViewModel : BaseViewModel
     #region 删除云端存档
 
     /// <summary>
+    /// 删除云端上整个游戏的所有数据（包括所有存档和 game.json）
+    /// </summary>
+    public async Task<(bool success, string message)> DeleteGameFromCloudAsync(CloudSaveGroup group)
+    {
+        if (SelectedCloudConfig == null)
+            return (false, "未选择云端配置");
+
+        IsLoading = true;
+        StatusMessage = $"正在删除游戏「{group.GameName}」的所有云端数据...";
+
+        try
+        {
+            var cloudService = new CloudStorageService(SelectedCloudConfig, _configService);
+            var deletedCount = await cloudService.DeleteGameAsync(group.GameId);
+
+            // 从本地列表中移除该分组
+            SaveGroups.Remove(group);
+
+            StatusMessage = $"已删除游戏「{group.GameName}」的全部云端数据（共 {deletedCount} 个文件）";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"删除失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
     /// 删除云端存档
     /// </summary>
     public async Task<(bool success, string message)> DeleteCloudSaveAsync(SaveFile cloudSave)

@@ -150,6 +150,7 @@ public class GameService
         IsGameRunning = true;
         RunningGameId = game.Id;
         RunningProcessId = process.Id;
+        game.IsRunning = true;
 
         // 通知：游戏运行中
         StatusChanged?.Invoke(this, new GameStatusInfo
@@ -169,6 +170,21 @@ public class GameService
             IsGameRunning = false;
             RunningGameId = null;
             RunningProcessId = 0;
+
+            // 使用应用主窗口的 DispatcherQueue 回到 UI 线程更新属性
+            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (dispatcherQueue != null)
+            {
+                dispatcherQueue.TryEnqueue(() =>
+                {
+                    game.IsRunning = false;
+                });
+            }
+            else
+            {
+                // Fallback：直接设置（可能无法正确通知 UI）
+                game.IsRunning = false;
+            }
 
             // 通知：正在备份
             StatusChanged?.Invoke(this, new GameStatusInfo

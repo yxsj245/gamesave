@@ -10,27 +10,34 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!-- 详情浮层 - 显示动画 -->
+        <!-- 游戏详情显示/隐藏动画 -->
         <Storyboard x:Name="ShowDetailsStoryboard">
             <DoubleAnimation Storyboard.TargetName="DetailsOverlay" 
                              Storyboard.TargetProperty="Opacity" 
-                             To="1" Duration="0:0:0.25">
+                             From="0" To="1" Duration="0:0:0.3">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseOut" Exponent="4"/>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
                              Storyboard.TargetProperty="ScaleX" 
-                             To="1" Duration="0:0:0.35">
+                             From="0.8" To="1" Duration="0:0:0.4">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseOut" Exponent="6"/>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
                              Storyboard.TargetProperty="ScaleY" 
-                             To="1" Duration="0:0:0.35">
+                             From="0.8" To="1" Duration="0:0:0.4">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseOut" Exponent="6"/>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardTranslate"
+                             Storyboard.TargetProperty="Y"
+                             From="50" To="0" Duration="0:0:0.4">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
@@ -38,23 +45,30 @@
         <Storyboard x:Name="HideDetailsStoryboard" Completed="HideDetailsStoryboard_Completed">
             <DoubleAnimation Storyboard.TargetName="DetailsOverlay" 
                              Storyboard.TargetProperty="Opacity" 
-                             To="0" Duration="0:0:0.2">
+                             To="0" Duration="0:0:0.25">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseIn" Exponent="4"/>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
                              Storyboard.TargetProperty="ScaleX" 
-                             To="0.9" Duration="0:0:0.2">
+                             To="0.95" Duration="0:0:0.25">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseIn" Exponent="6"/>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
                              Storyboard.TargetProperty="ScaleY" 
-                             To="0.9" Duration="0:0:0.2">
+                             To="0.95" Duration="0:0:0.25">
                  <DoubleAnimation.EasingFunction>
-                     <ExponentialEase EasingMode="EaseIn" Exponent="6"/>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardTranslate"
+                             Storyboard.TargetProperty="Y"
+                             To="20" Duration="0:0:0.25">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
                  </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
@@ -88,48 +102,44 @@
             <TextBlock Text="点击上方「添加游戏」开始管理你的存档" FontSize="14" Foreground="DarkGray" HorizontalAlignment="Center" Margin="0,8,0,0"/>
         </StackPanel>
 
-        <!-- 游戏卡片库 -->
-        <GridView Grid.Row="1"
-                  x:Name="GamesGrid"
+        <!-- 游戏列表 -->
+        <ListView Grid.Row="1"
+                  x:Name="GamesList"
                   ItemsSource="{x:Bind ViewModel.Games, Mode=OneWay}"
                   SelectionMode="None"
-                  IsItemClickEnabled="True"
-                  ItemClick="GamesGridView_ItemClick">
-            <GridView.Resources>
-                <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="Transparent" />
-                <SolidColorBrush x:Key="GridViewItemBorderBrushPointerOver" Color="Transparent" />
-                <SolidColorBrush x:Key="GridViewItemBackgroundPressed" Color="Transparent" />
-                <SolidColorBrush x:Key="GridViewItemBorderBrushPressed" Color="Transparent" />
-            </GridView.Resources>
-            <GridView.ItemContainerStyle>
-                <Style TargetType="GridViewItem">
+                  Tapped="GamesList_Tapped"
+                  HorizontalAlignment="Stretch">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0" />
-                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,8" />
                     <Setter Property="UseSystemFocusVisuals" Value="False" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
-            </GridView.ItemContainerStyle>
-            <GridView.ItemContainerTransitions>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemContainerTransitions>
                 <TransitionCollection>
                     <EntranceThemeTransition IsStaggeringEnabled="True" />
                 </TransitionCollection>
-            </GridView.ItemContainerTransitions>
-            <GridView.ItemTemplate>
+            </ListView.ItemContainerTransitions>
+            <ListView.ItemTemplate>
                 <DataTemplate x:DataType="models:Game">
-                    <Border Margin="8" Width="220" Height="260"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border Margin="0" Height="80"
                             CornerRadius="8"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
-                            PointerEntered="GameCard_PointerEntered"
-                            PointerExited="GameCard_PointerExited"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            PointerEntered="GameListItem_PointerEntered"
+                            PointerExited="GameListItem_PointerExited"
+                            PointerMoved="GameListItem_PointerMoved"
                             RenderTransformOrigin="0.5,0.5">
+                            
+                            <Border.Background>
+                                <!-- The visible background of the card -->
+                                <SolidColorBrush Color="{ThemeResource CardBackgroundFillColorDefault}" />
+                            </Border.Background>
+
                             <Border.ContextFlyout>
                                 <MenuFlyout>
-                                    <MenuFlyoutItem Text="启动游戏" Click="ContextLaunch_Click">
-                                        <MenuFlyoutItem.Icon>
-                                            <FontIcon Glyph="&#xE768;"/>
-                                        </MenuFlyoutItem.Icon>
-                                    </MenuFlyoutItem>
                                     <MenuFlyoutItem Text="手动备份" Click="ContextBackup_Click">
                                         <MenuFlyoutItem.Icon>
                                             <FontIcon Glyph="&#xE898;"/>
@@ -143,37 +153,77 @@
                                     </MenuFlyoutItem>
                                 </MenuFlyout>
                             </Border.ContextFlyout>
+                            
                             <Border.RenderTransform>
                                 <ScaleTransform ScaleX="1" ScaleY="1" />
                             </Border.RenderTransform>
+                            
                             <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="180" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
+                                <!-- 底层光晕效果 -->
+                                <Rectangle x:Name="GlowRect" Opacity="0" IsHitTestVisible="False">
+                                    <Rectangle.Fill>
+                                        <RadialGradientBrush x:Name="GlowBrush" Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="1.5">
+                                            <GradientStop Color="#20FFFFFF" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
                                 
-                                <!-- 封面占位 -->
-                                <Border Grid.Row="0" CornerRadius="8,8,0,0" Background="LightGray">
-                                    <FontIcon Glyph="&#xE7FC;" FontSize="48" Foreground="Gray" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                </Border>
-                                
-                                <!-- 游戏信息文本 -->
-                                <StackPanel Grid.Row="1" Padding="12" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name}" 
-                                               FontWeight="Bold" 
-                                               FontSize="16" 
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{x:Bind DisplayAddedAt}" 
-                                               Foreground="DarkGray" 
-                                               FontSize="12" 
-                                               Margin="0,4,0,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
+                                <Grid Margin="12,0" Background="Transparent">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- 游戏图标占用 -->
+                                    <Border Grid.Column="0" Width="48" Height="48" CornerRadius="4" Background="LightGray" VerticalAlignment="Center">
+                                        <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="Gray" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    
+                                    <!-- 游戏信息文本 -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                        <TextBlock Text="{x:Bind Name}" 
+                                                   FontWeight="Bold" 
+                                                   FontSize="16" 
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{x:Bind DisplayAddedAt}" 
+                                                   Foreground="DarkGray" 
+                                                   FontSize="12" 
+                                                   Margin="0,4,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    
+                                    <!-- 启动游戏按钮 -->
+                                    <Button Grid.Column="2" 
+                                            Margin="16,0,0,0" 
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="ListItemLaunchGame_Click"
+                                            Visibility="{x:Bind IsRunning, Converter={StaticResource InverseBoolVisibilityConverter}, Mode=OneWay}"
+                                            ToolTipService.ToolTip="启动游戏"
+                                            Width="40" Height="40" Padding="0">
+                                        <FontIcon Glyph="&#xE768;" FontSize="16"/>
+                                    </Button>
+
+                                    <!-- 停止游戏按钮 -->
+                                    <Button Grid.Column="2" 
+                                            Margin="16,0,0,0" 
+                                            VerticalAlignment="Center"
+                                            Click="ListItemLaunchGame_Click"
+                                            Visibility="{x:Bind IsRunning, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
+                                            ToolTipService.ToolTip="结束游戏"
+                                            Width="40" Height="40" Padding="0"
+                                            Background="Transparent"
+                                            BorderBrush="{ThemeResource SystemFillColorCriticalBrush}">
+                                        <FontIcon Glyph="&#xE711;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                    </Button>
+                                </Grid>
                             </Grid>
                     </Border>
                 </DataTemplate>
-            </GridView.ItemTemplate>
-        </GridView>
+            </ListView.ItemTemplate>
+        </ListView>
 
         <!-- 游戏详情浮层 (Overlay) -->
         <Grid x:Name="DetailsOverlay" Grid.Row="0" Grid.RowSpan="2" 
@@ -192,7 +242,10 @@
                     BorderThickness="1"
                     RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform>
-                    <ScaleTransform x:Name="DetailsCardScale" ScaleX="0.9" ScaleY="0.9" />
+                    <TransformGroup>
+                        <ScaleTransform x:Name="DetailsCardScale" ScaleX="0.95" ScaleY="0.95" />
+                        <TranslateTransform x:Name="DetailsCardTranslate" Y="20" />
+                    </TransformGroup>
                 </Border.RenderTransform>
                     
                 <Grid DataContext="{x:Bind ViewModel, Mode=OneWay}">
