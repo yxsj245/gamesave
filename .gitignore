@@ -1,0 +1,72 @@
+## ========================================
+## WinUI 3 / C# / .NET 通用忽略规则
+## ========================================
+
+# 编译输出
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+
+# .NET 构建产物
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# NuGet 包缓存（本地还原即可，不需要提交）
+packages/
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio 相关
+.vs/
+*.vscontent
+*.vssscc
+*.vspscc
+*.pidb
+*.svclog
+*.scc
+
+# VSCode 相关（保留 settings，忽略本地状态）
+.vscode/launch.json
+.vscode/.ropeproject
+
+# WinUI 3 / MSIX 打包产物
+AppPackages/
+BundleArtifacts/
+Package.StoreAssociation.xml
+_pkginfo.txt
+*.appx
+*.appxbundle
+*.appxsym
+*.msix
+*.msixbundle
+
+# Rider
+.idea/
+*.DotSettings.user
+
+# 测试结果
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# 崩溃转储
+*.dmp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 用户敏感配置（云存储密码等）
+appsettings.local.json
+**/secrets.json
+**/*.user-secrets.json

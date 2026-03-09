@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="GameSave.Views.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:GameSave"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Page.Content>
+        <StackPanel
+            HorizontalAlignment="Center"
+            Spacing="25"
+            VerticalAlignment="Center">
+            <TextBlock
+                FontSize="24"
+                HorizontalAlignment="Center"
+                Style="{StaticResource MyLabel}"
+                Text="Hello, World!" />
+            <TextBlock
+                FontSize="20"
+                HorizontalAlignment="Center"
+                Style="{StaticResource MyLabel}"
+                Text="Welcome to WinUI 3!" />
+            <TextBlock
+                FontSize="16"
+                HorizontalAlignment="Center"
+                Style="{StaticResource MyLabel}"
+                Text="{x:Bind ViewModel.CountText, Mode=TwoWay}" />
+            <Button
+                Command="{x:Bind ViewModel.IncrementCommand}"
+                Content="Click Me"
+                HorizontalAlignment="Center"
+                Style="{StaticResource PrimaryAction}" />
+        </StackPanel>
+    </Page.Content>
+</Page>
