@@ -12,6 +12,11 @@ namespace GameSave.Views
     {
         public CloudViewModel ViewModel { get; } = new CloudViewModel();
 
+        /// <summary>是否处于批量删除模式</summary>
+        private bool _isCloudBatchMode = false;
+        /// <summary>批量选中的云端存档列表</summary>
+        private readonly List<SaveFile> _selectedCloudSaves = new();
+
         public CloudPage()
         {
             this.InitializeComponent();
@@ -238,8 +243,32 @@ namespace GameSave.Views
             {
                 Padding = new Microsoft.UI.Xaml.Thickness(0, 6, 0, 6)
             };
+
+            // 批量模式下增加 CheckBox 列
+            if (_isCloudBatchMode)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = Microsoft.UI.Xaml.GridLength.Auto });
+            }
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(1, Microsoft.UI.Xaml.GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = Microsoft.UI.Xaml.GridLength.Auto });
+
+            int colOffset = 0;
+
+            // 批量模式：CheckBox
+            if (_isCloudBatchMode)
+            {
+                var checkBox = new CheckBox
+                {
+                    Tag = save,
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                    Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 8, 0)
+                };
+                checkBox.Checked += CloudSaveCheckBox_Changed;
+                checkBox.Unchecked += CloudSaveCheckBox_Changed;
+                Grid.SetColumn(checkBox, 0);
+                grid.Children.Add(checkBox);
+                colOffset = 1;
+            }
 
             // 存档信息
             var infoPanel = new StackPanel();
@@ -274,7 +303,7 @@ namespace GameSave.Views
             };
             infoPanel.Children.Add(detailText);
 
-            Grid.SetColumn(infoPanel, 0);
+            Grid.SetColumn(infoPanel, colOffset);
             grid.Children.Add(infoPanel);
 
             // 操作按钮
@@ -346,7 +375,7 @@ namespace GameSave.Views
             deleteBtn.Click += DeleteCloudSave_Click;
             btnPanel.Children.Add(deleteBtn);
 
-            Grid.SetColumn(btnPanel, 1);
+            Grid.SetColumn(btnPanel, _isCloudBatchMode ? 2 : 1);
             grid.Children.Add(btnPanel);
 
             return grid;
@@ -459,6 +488,102 @@ namespace GameSave.Views
                 }
             }
         }
+
+        #region 云端批量删除
+
+        /// <summary>进入云端批量删除模式</summary>
+        private void EnterCloudBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            _isCloudBatchMode = true;
+            _selectedCloudSaves.Clear();
+            EnterCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            ConfirmCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            CancelCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            CloudBatchDeleteCountText.Text = "删除所选";
+            // 重建 UI 以显示 CheckBox
+            BuildSaveGroupsUI();
+        }
+
+        /// <summary>取消云端批量删除模式</summary>
+        private void CancelCloudBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            ExitCloudBatchDeleteMode();
+        }
+
+        /// <summary>确认批量删除云端存档</summary>
+        private async void ConfirmCloudBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (_selectedCloudSaves.Count == 0)
+            {
+                var hintDialog = new ContentDialog
+                {
+                    Title = "提示",
+                    Content = "请先勾选要删除的云端存档",
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await hintDialog.ShowAsync();
+                return;
+            }
+
+            var confirmDialog = new ContentDialog
+            {
+                Title = "确认批量删除云端存档",
+                Content = $"确定要删除选中的 {_selectedCloudSaves.Count} 个云端存档吗？\n\n此操作不可撤销。",
+                PrimaryButtonText = "删除",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await confirmDialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                var savesToDelete = _selectedCloudSaves.ToList();
+                var (success, message) = await ViewModel.BatchDeleteCloudSavesAsync(savesToDelete);
+
+                StatusText.Text = message;
+                ExitCloudBatchDeleteMode();
+
+                // 刷新列表
+                await RefreshCloudSaves();
+            }
+        }
+
+        /// <summary>CheckBox 选中/取消选中时更新已选列表</summary>
+        private void CloudSaveCheckBox_Changed(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is CheckBox cb && cb.Tag is SaveFile save)
+            {
+                if (cb.IsChecked == true)
+                {
+                    if (!_selectedCloudSaves.Contains(save))
+                        _selectedCloudSaves.Add(save);
+                }
+                else
+                {
+                    _selectedCloudSaves.Remove(save);
+                }
+
+                CloudBatchDeleteCountText.Text = _selectedCloudSaves.Count > 0
+                    ? $"删除所选 ({_selectedCloudSaves.Count})"
+                    : "删除所选";
+            }
+        }
+
+        /// <summary>退出云端批量删除模式</summary>
+        private void ExitCloudBatchDeleteMode()
+        {
+            _isCloudBatchMode = false;
+            _selectedCloudSaves.Clear();
+            EnterCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            ConfirmCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            CancelCloudBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            // 重建 UI 以移除 CheckBox
+            BuildSaveGroupsUI();
+        }
+
+        #endregion
 
         #region 状态切换
 

@@ -498,6 +498,57 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// 批量删除多个存档
+    /// </summary>
+    public async Task<(bool success, string message)> BatchDeleteSavesAsync(IList<SaveFile> saveFiles)
+    {
+        if (saveFiles == null || saveFiles.Count == 0)
+            return (false, "请选择要删除的存档");
+
+        // 过滤掉不可删除的退出存档
+        var deletable = saveFiles.Where(s => s.CanDelete).ToList();
+        if (deletable.Count == 0)
+            return (false, "所选存档均为退出存档，不允许删除");
+
+        IsBusy = true;
+
+        try
+        {
+            int successCount = 0;
+            int failCount = 0;
+
+            foreach (var save in deletable)
+            {
+                try
+                {
+                    await _localStorageService.DeleteSaveAsync(save);
+                    CurrentSaves.Remove(save);
+                    successCount++;
+                }
+                catch
+                {
+                    failCount++;
+                }
+            }
+
+            StatusMessage = failCount > 0
+                ? $"批量删除完成：成功 {successCount} 个，失败 {failCount} 个"
+                : $"已成功删除 {successCount} 个存档";
+
+            return (failCount == 0, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"批量删除失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     #endregion
 
     #region 删除游戏

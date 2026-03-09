@@ -415,6 +415,99 @@ namespace GameSave.Views
 
         #endregion
 
+        #region 批量删除存档
+
+        /// <summary>进入批量删除模式</summary>
+        private void EnterBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            SavesListView.SelectionMode = ListViewSelectionMode.Multiple;
+            EnterBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            ConfirmBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            CancelBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            BatchDeleteCountText.Text = "删除所选";
+        }
+
+        /// <summary>取消批量删除模式</summary>
+        private void CancelBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            ExitBatchDeleteMode();
+        }
+
+        /// <summary>执行批量删除</summary>
+        private async void ConfirmBatchDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            var selectedItems = SavesListView.SelectedItems
+                .OfType<SaveFile>()
+                .ToList();
+
+            if (selectedItems.Count == 0)
+            {
+                await ShowMessageAsync("提示", "请先选择要删除的存档");
+                return;
+            }
+
+            // 过滤出可删除的（手动存档）
+            var deletable = selectedItems.Where(s => s.CanDelete).ToList();
+            var skipped = selectedItems.Count - deletable.Count;
+
+            var confirmMsg = deletable.Count > 0
+                ? $"确定要删除选中的 {deletable.Count} 个存档吗？" +
+                  (skipped > 0 ? $"\n（已自动跳过 {skipped} 个退出存档）" : "") +
+                  "\n\n此操作不可撤回。"
+                : "所选存档均为退出存档，无法删除。";
+
+            if (deletable.Count == 0)
+            {
+                await ShowMessageAsync("提示", confirmMsg);
+                return;
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = "确认批量删除",
+                Content = confirmMsg,
+                PrimaryButtonText = "删除",
+                SecondaryButtonText = "取消",
+                DefaultButton = ContentDialogButton.Secondary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                var (success, message) = await ViewModel.BatchDeleteSavesAsync(deletable);
+                if (!success)
+                {
+                    await ShowMessageAsync("批量删除", message);
+                }
+
+                ExitBatchDeleteMode();
+            }
+        }
+
+        /// <summary>选择变更时更新计数文字</summary>
+        private void SavesListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SavesListView.SelectionMode == ListViewSelectionMode.Multiple)
+            {
+                var count = SavesListView.SelectedItems.Count;
+                BatchDeleteCountText.Text = count > 0
+                    ? $"删除所选 ({count})"
+                    : "删除所选";
+            }
+        }
+
+        /// <summary>退出批量删除模式</summary>
+        private void ExitBatchDeleteMode()
+        {
+            SavesListView.SelectionMode = ListViewSelectionMode.None;
+            EnterBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            ConfirmBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            CancelBatchDeleteBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+
+        #endregion
+
         #region 删除游戏
 
         private async void DeleteGame_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

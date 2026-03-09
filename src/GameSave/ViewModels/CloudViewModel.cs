@@ -409,5 +409,56 @@ public partial class CloudViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// 批量删除多个云端存档
+    /// </summary>
+    public async Task<(bool success, string message)> BatchDeleteCloudSavesAsync(IList<SaveFile> saveFiles)
+    {
+        if (SelectedCloudConfig == null)
+            return (false, "未选择云端配置");
+
+        if (saveFiles == null || saveFiles.Count == 0)
+            return (false, "请选择要删除的存档");
+
+        IsLoading = true;
+        StatusMessage = $"正在批量删除 {saveFiles.Count} 个云端存档...";
+
+        try
+        {
+            var cloudService = new CloudStorageService(SelectedCloudConfig, _configService);
+            int successCount = 0;
+            int failCount = 0;
+
+            foreach (var save in saveFiles)
+            {
+                try
+                {
+                    await cloudService.DeleteSaveAsync(save);
+                    successCount++;
+                    StatusMessage = $"正在删除... ({successCount + failCount}/{saveFiles.Count})";
+                }
+                catch
+                {
+                    failCount++;
+                }
+            }
+
+            StatusMessage = failCount > 0
+                ? $"批量删除完成：成功 {successCount} 个，失败 {failCount} 个"
+                : $"已成功删除 {successCount} 个云端存档";
+
+            return (failCount == 0, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"批量删除失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
     #endregion
 }

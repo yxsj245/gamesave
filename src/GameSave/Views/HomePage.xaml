@@ -257,11 +257,45 @@
                                      HorizontalAlignment="Stretch" />
                     </StackPanel>
 
-                    <!-- 存档列表标题 -->
-                    <TextBlock Grid.Row="2" Text="存档列表" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <!-- 存档列表标题及批量操作 -->
+                    <Grid Grid.Row="2" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Grid.Column="0" Text="存档列表" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        
+                        <!-- 批量操作按钮区域 -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- 进入批量删除模式 -->
+                            <Button x:Name="EnterBatchDeleteBtn" Click="EnterBatchDelete_Click"
+                                    ToolTipService.ToolTip="批量删除存档">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE762;" FontSize="13"/>
+                                    <TextBlock Text="批量删除" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 执行批量删除（批量模式下显示） -->
+                            <Button x:Name="ConfirmBatchDeleteBtn" Click="ConfirmBatchDelete_Click"
+                                    Visibility="Collapsed"
+                                    ToolTipService.ToolTip="删除所选存档">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="13" Foreground="Red"/>
+                                    <TextBlock x:Name="BatchDeleteCountText" Text="删除所选" FontSize="12" Foreground="Red"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 取消批量删除 -->
+                            <Button x:Name="CancelBatchDeleteBtn" Click="CancelBatchDelete_Click"
+                                    Content="取消" FontSize="12"
+                                    Visibility="Collapsed"
+                                    ToolTipService.ToolTip="取消批量操作"/>
+                        </StackPanel>
+                    </Grid>
                     
                     <!-- 存档历史列表 -->
-                    <ListView Grid.Row="3" ItemsSource="{Binding CurrentSaves}" SelectionMode="None">
+                    <ListView x:Name="SavesListView" Grid.Row="3" ItemsSource="{Binding CurrentSaves}" SelectionMode="None"
+                              SelectionChanged="SavesListView_SelectionChanged">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Border Margin="0,0,0,10" Padding="16" 

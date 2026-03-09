@@ -36,12 +36,35 @@
                       PlaceholderText="选择云端配置"/>
 
             <!-- 刷新按钮 -->
-            <Button Grid.Column="2" Click="Refresh_Click" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE72C;" FontSize="14"/>
-                    <TextBlock Text="刷新"/>
-                </StackPanel>
-            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <!-- 进入批量删除模式 -->
+                <Button x:Name="EnterCloudBatchDeleteBtn" Click="EnterCloudBatchDelete_Click"
+                        ToolTipService.ToolTip="批量删除云端存档">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <FontIcon Glyph="&#xE762;" FontSize="13"/>
+                        <TextBlock Text="批量删除" FontSize="12"/>
+                    </StackPanel>
+                </Button>
+                <!-- 执行批量删除（批量模式下显示） -->
+                <Button x:Name="ConfirmCloudBatchDeleteBtn" Click="ConfirmCloudBatchDelete_Click"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <FontIcon Glyph="&#xE74D;" FontSize="13" Foreground="Red"/>
+                        <TextBlock x:Name="CloudBatchDeleteCountText" Text="删除所选" FontSize="12" Foreground="Red"/>
+                    </StackPanel>
+                </Button>
+                <!-- 取消批量删除 -->
+                <Button x:Name="CancelCloudBatchDeleteBtn" Click="CancelCloudBatchDelete_Click"
+                        Content="取消" FontSize="12"
+                        Visibility="Collapsed"/>
+
+                <Button Click="Refresh_Click" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14"/>
+                        <TextBlock Text="刷新"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- 无配置引导 -->
