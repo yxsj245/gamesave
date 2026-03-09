@@ -12,8 +12,14 @@ public class CloudSaveGroup
     /// <summary>游戏 ID</summary>
     public string GameId { get; set; } = string.Empty;
 
-    /// <summary>游戏名称（若本地已添加则显示名称，否则显示 ID）</summary>
+    /// <summary>游戏名称（优先使用本地 → 云端元数据 → ID 兜底）</summary>
     public string GameName { get; set; } = string.Empty;
+
+    /// <summary>本地是否存在该游戏配置</summary>
+    public bool IsLocalGameExists { get; set; } = true;
+
+    /// <summary>云端保存的游戏元数据（来自 game.json）</summary>
+    public Game? CloudGameMetadata { get; set; }
 
     /// <summary>该游戏下的云端存档列表</summary>
     public ObservableCollection<SaveFile> Saves { get; set; } = new();
@@ -158,19 +164,38 @@ public partial class CloudViewModel : BaseViewModel
         try
         {
             var cloudService = new CloudStorageService(SelectedCloudConfig, _configService);
-            var grouped = await cloudService.GetAllSavesGroupedAsync();
+            var groupInfos = await cloudService.GetAllSavesGroupedAsync();
 
-            foreach (var (gameId, saves) in grouped)
+            foreach (var groupInfo in groupInfos)
             {
-                // 尝试从本地配置找到游戏名称
-                var game = _configService.GetGameById(gameId);
+                // 尝试从本地配置找到游戏
+                var localGame = _configService.GetGameById(groupInfo.GameId);
+                var isLocalExists = localGame != null;
+
+                // 游戏名称优先级：本地配置 > 云端元数据 > ID 兜底
+                string gameName;
+                if (localGame != null)
+                {
+                    gameName = localGame.Name;
+                }
+                else if (groupInfo.CloudGameMetadata != null)
+                {
+                    gameName = groupInfo.CloudGameMetadata.Name;
+                }
+                else
+                {
+                    gameName = $"未知游戏 ({groupInfo.GameId[..Math.Min(8, groupInfo.GameId.Length)]})";
+                }
+
                 var group = new CloudSaveGroup
                 {
-                    GameId = gameId,
-                    GameName = game?.Name ?? $"未知游戏 ({gameId[..8]}...)"
+                    GameId = groupInfo.GameId,
+                    GameName = gameName,
+                    IsLocalGameExists = isLocalExists,
+                    CloudGameMetadata = groupInfo.CloudGameMetadata
                 };
 
-                foreach (var save in saves)
+                foreach (var save in groupInfo.Saves)
                 {
                     group.Saves.Add(save);
                 }
@@ -189,6 +214,117 @@ public partial class CloudViewModel : BaseViewModel
         finally
         {
             IsLoading = false;
+        }
+    }
+
+    #endregion
+
+    #region 导入恢复
+
+    /// <summary>
+    /// 从云端元数据导入游戏到本地配置
+    /// </summary>
+    public async Task<(bool success, string message)> ImportGameFromCloudAsync(CloudSaveGroup group)
+    {
+        if (group.CloudGameMetadata == null)
+            return (false, "云端不包含该游戏的元数据信息，无法自动导入");
+
+        if (_configService.GetGameById(group.GameId) != null)
+            return (false, "该游戏已存在于本地");
+
+        try
+        {
+            IsLoading = true;
+            StatusMessage = $"正在导入游戏「{group.CloudGameMetadata.Name}」...";
+
+            // 使用云端元数据创建本地游戏配置
+            var game = new Game
+            {
+                Id = group.CloudGameMetadata.Id,
+                Name = group.CloudGameMetadata.Name,
+                SaveFolderPath = group.CloudGameMetadata.SaveFolderPath,
+                IconPath = group.CloudGameMetadata.IconPath,
+                ProcessPath = group.CloudGameMetadata.ProcessPath,
+                ProcessArgs = group.CloudGameMetadata.ProcessArgs,
+                CloudConfigId = SelectedCloudConfig?.Id, // 关联当前选中的云端配置
+                AddedAt = DateTime.Now,
+                Notes = group.CloudGameMetadata.Notes
+            };
+
+            // 确保游戏工作目录存在
+            _configService.GetGameWorkDirectory(game.Id);
+
+            await _configService.AddGameAsync(game);
+
+            // 更新分组状态
+            group.IsLocalGameExists = true;
+            group.GameName = game.Name;
+
+            StatusMessage = $"游戏「{game.Name}」已成功导入";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"导入失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// 导入游戏（如需要）并恢复指定的云端存档
+    /// </summary>
+    public async Task<(bool success, string message)> ImportAndRestoreAsync(CloudSaveGroup group, SaveFile cloudSave)
+    {
+        // 先确保游戏已导入
+        if (!group.IsLocalGameExists)
+        {
+            var (importSuccess, importMsg) = await ImportGameFromCloudAsync(group);
+            if (!importSuccess)
+                return (false, importMsg);
+        }
+
+        // 下载云端存档
+        var (downloadSuccess, downloadMsg) = await DownloadSaveAsync(cloudSave);
+        if (!downloadSuccess)
+            return (false, downloadMsg);
+
+        // 恢复存档到本地游戏目录
+        try
+        {
+            var game = _configService.GetGameById(group.GameId);
+            if (game == null)
+                return (false, "导入后未找到游戏配置");
+
+            var localStorage = new LocalStorageService(_configService);
+            var localDir = _configService.GetGameWorkDirectory(game.Id);
+            var tarFileName = Path.GetFileName(cloudSave.Path);
+            var localTarPath = Path.Combine(localDir, tarFileName);
+
+            // 创建本地 SaveFile 用于恢复
+            var localSave = new SaveFile
+            {
+                Id = cloudSave.Id,
+                GameId = cloudSave.GameId,
+                Name = cloudSave.Name,
+                Path = localTarPath,
+                BackupTime = cloudSave.BackupTime,
+                SizeBytes = cloudSave.SizeBytes,
+                StorageType = StorageType.Local,
+                Tag = cloudSave.Tag
+            };
+
+            await localStorage.RestoreSaveAsync(localSave);
+            StatusMessage = $"存档「{cloudSave.Name}」已恢复到本地";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"恢复失败: {ex.Message}";
+            return (false, StatusMessage);
         }
     }
 

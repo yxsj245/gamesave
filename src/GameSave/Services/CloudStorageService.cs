@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using GameSave.Models;
 
 namespace GameSave.Services;
@@ -61,35 +63,56 @@ public class CloudStorageService : IStorageService
     }
 
     /// <summary>
-    /// 获取所有游戏的云端存档（按游戏分组）
+    /// 云端存档分组信息（包含游戏元数据）
     /// </summary>
-    public async Task<Dictionary<string, List<SaveFile>>> GetAllSavesGroupedAsync()
+    public class CloudSaveGroupInfo
     {
-        var result = new Dictionary<string, List<SaveFile>>();
+        /// <summary>游戏 ID</summary>
+        public string GameId { get; set; } = string.Empty;
+
+        /// <summary>云端保存的游戏元数据（若有 game.json）</summary>
+        public Game? CloudGameMetadata { get; set; }
+
+        /// <summary>该游戏下的云端存档列表</summary>
+        public List<SaveFile> Saves { get; set; } = new();
+    }
+
+    /// <summary>
+    /// 获取所有游戏的云端存档（按游戏分组），同时读取云端游戏元数据
+    /// </summary>
+    public async Task<List<CloudSaveGroupInfo>> GetAllSavesGroupedAsync()
+    {
+        var groupDict = new Dictionary<string, CloudSaveGroupInfo>();
 
         using var provider = CreateProvider();
         var allObjects = await provider.ListObjectsAsync();
 
         foreach (var obj in allObjects)
         {
-            if (!obj.Key.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // 解析 key: {gameId}/{timestamp}_{tagName}.tar
+            // 解析 key 结构: {gameId}/xxx
             var slashIndex = obj.Key.IndexOf('/');
             if (slashIndex <= 0)
                 continue;
 
             var gameId = obj.Key[..slashIndex];
+
+            // 确保分组存在
+            if (!groupDict.ContainsKey(gameId))
+                groupDict[gameId] = new CloudSaveGroupInfo { GameId = gameId };
+
+            // 跳过 game.json（后面单独处理）
+            if (obj.Key.EndsWith("game.json", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!obj.Key.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+                continue;
+
             var fileName = Path.GetFileNameWithoutExtension(obj.Key[(slashIndex + 1)..]);
             var parsed = ParseTarFileName(fileName);
 
             if (parsed.HasValue)
             {
-                if (!result.ContainsKey(gameId))
-                    result[gameId] = new List<SaveFile>();
-
-                result[gameId].Add(new SaveFile
+                groupDict[gameId].Saves.Add(new SaveFile
                 {
                     Id = Guid.NewGuid().ToString(),
                     GameId = gameId,
@@ -104,13 +127,31 @@ public class CloudStorageService : IStorageService
             }
         }
 
-        // 每组按时间降序
-        foreach (var saves in result.Values)
+        // 尝试读取每个游戏的元数据
+        foreach (var group in groupDict.Values)
         {
-            saves.Sort((a, b) => b.BackupTime.CompareTo(a.BackupTime));
+            try
+            {
+                var json = await provider.DownloadContentAsync($"{group.GameId}/game.json");
+                if (json != null)
+                {
+                    group.CloudGameMetadata = JsonSerializer.Deserialize<Game>(json, _jsonOptions);
+                }
+            }
+            catch
+            {
+                // 元数据读取失败不影响存档列表
+                System.Diagnostics.Debug.WriteLine($"[云端] 读取 {group.GameId}/game.json 失败");
+            }
         }
 
-        return result;
+        // 每组按时间降序
+        foreach (var group in groupDict.Values)
+        {
+            group.Saves.Sort((a, b) => b.BackupTime.CompareTo(a.BackupTime));
+        }
+
+        return groupDict.Values.ToList();
     }
 
     /// <summary>
@@ -185,6 +226,34 @@ public class CloudStorageService : IStorageService
     }
 
     /// <summary>
+    /// 上传游戏元数据到云端（game.json）
+    /// </summary>
+    /// <param name="game">游戏信息</param>
+    public async Task UploadGameMetadataAsync(Game game)
+    {
+        var json = JsonSerializer.Serialize(game, _jsonOptions);
+        var ossKey = $"{game.Id}/game.json";
+
+        using var provider = CreateProvider();
+        await provider.UploadContentAsync(json, ossKey);
+        System.Diagnostics.Debug.WriteLine($"[云端] 已上传游戏元数据: {game.Name} ({game.Id})");
+    }
+
+    /// <summary>
+    /// 获取云端游戏元数据
+    /// </summary>
+    /// <param name="gameId">游戏 ID</param>
+    /// <returns>游戏信息，若不存在则返回 null</returns>
+    public async Task<Game?> GetGameMetadataAsync(string gameId)
+    {
+        using var provider = CreateProvider();
+        var json = await provider.DownloadContentAsync($"{gameId}/game.json");
+        if (json == null) return null;
+
+        return JsonSerializer.Deserialize<Game>(json, _jsonOptions);
+    }
+
+    /// <summary>
     /// 删除云端存档
     /// </summary>
     public async Task DeleteSaveAsync(SaveFile saveFile)
@@ -208,6 +277,13 @@ public class CloudStorageService : IStorageService
             return (false, $"连接测试失败: {ex.Message}");
         }
     }
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     /// <summary>
     /// 创建底层存储提供者实例

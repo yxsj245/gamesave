@@ -401,6 +401,9 @@ public class GameService
             var cloudService = new CloudStorageService(cloudConfig, _configService);
             await cloudService.UploadSaveFileAsync(save, game, progressHandler);
 
+            // 同步上传游戏元数据到云端（确保 game.json 始终最新）
+            await cloudService.UploadGameMetadataAsync(game);
+
             System.Diagnostics.Debug.WriteLine($"[云端同步] {game.Name} 存档已上传到 {cloudConfig.DisplayName}");
 
             // 通知：上传完成

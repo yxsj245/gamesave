@@ -159,6 +159,49 @@ public class OssStorageProvider : IDisposable
     }
 
     /// <summary>
+    /// 上传字符串内容到 OSS（用于上传 JSON 元数据等小文件）
+    /// </summary>
+    /// <param name="content">字符串内容</param>
+    /// <param name="ossKey">OSS 对象键（不含 basePath 前缀）</param>
+    public Task UploadContentAsync(string content, string ossKey)
+    {
+        return Task.Run(() =>
+        {
+            var fullKey = _basePath + ossKey;
+            var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+            using var stream = new MemoryStream(bytes);
+            _client.PutObject(_bucketName, fullKey, stream);
+            System.Diagnostics.Debug.WriteLine($"[OSS] 内容上传完成: {fullKey}");
+        });
+    }
+
+    /// <summary>
+    /// 从 OSS 下载对象内容为字符串（用于读取 JSON 元数据等小文件）
+    /// </summary>
+    /// <param name="ossKey">OSS 对象键（不含 basePath 前缀）</param>
+    /// <returns>文件内容字符串，若对象不存在则返回 null</returns>
+    public Task<string?> DownloadContentAsync(string ossKey)
+    {
+        return Task.Run(() =>
+        {
+            var fullKey = _basePath + ossKey;
+            try
+            {
+                var result = _client.GetObject(_bucketName, fullKey);
+                using var reader = new StreamReader(result.Content);
+                var content = reader.ReadToEnd();
+                System.Diagnostics.Debug.WriteLine($"[OSS] 内容下载完成: {fullKey}");
+                return (string?)content;
+            }
+            catch (OssException ex) when (ex.ErrorCode == "NoSuchKey")
+            {
+                // 对象不存在，返回 null
+                return null;
+            }
+        });
+    }
+
+    /// <summary>
     /// 删除 OSS 上的对象
     /// </summary>
     /// <param name="ossKey">OSS 对象键（不含 basePath 前缀）</param>

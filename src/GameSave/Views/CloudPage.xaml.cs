@@ -6,7 +6,7 @@ namespace GameSave.Views
 {
     /// <summary>
     /// 云端存档页面
-    /// 展示云端存档列表（按游戏分组），支持下载和删除
+    /// 展示云端存档列表（按游戏分组），支持下载、删除和导入恢复
     /// </summary>
     public partial class CloudPage : Page
     {
@@ -134,22 +134,27 @@ namespace GameSave.Views
 
                 var cardContent = new StackPanel { Spacing = 12 };
 
-                // 游戏名称标题
-                var headerPanel = new StackPanel { Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal, Spacing = 8 };
-                headerPanel.Children.Add(new FontIcon
+                // 游戏名称标题行
+                var headerPanel = new Grid();
+                headerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(1, Microsoft.UI.Xaml.GridUnitType.Star) });
+                headerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = Microsoft.UI.Xaml.GridLength.Auto });
+
+                // 左侧：图标 + 名称 + 存档数量
+                var leftPanel = new StackPanel { Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal, Spacing = 8 };
+                leftPanel.Children.Add(new FontIcon
                 {
                     Glyph = "\uE7FC",
                     FontSize = 18,
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
                 });
-                headerPanel.Children.Add(new TextBlock
+                leftPanel.Children.Add(new TextBlock
                 {
                     Text = group.GameName,
                     FontSize = 16,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
                 });
-                headerPanel.Children.Add(new TextBlock
+                leftPanel.Children.Add(new TextBlock
                 {
                     Text = group.DisplayCount,
                     FontSize = 12,
@@ -157,6 +162,47 @@ namespace GameSave.Views
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
                     Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
                 });
+
+                Grid.SetColumn(leftPanel, 0);
+                headerPanel.Children.Add(leftPanel);
+
+                // 右侧：本地不存在时显示"导入恢复"按钮
+                if (!group.IsLocalGameExists && group.CloudGameMetadata != null)
+                {
+                    var importBtn = new Button
+                    {
+                        Content = new StackPanel
+                        {
+                            Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                            Spacing = 6,
+                            Children =
+                            {
+                                new FontIcon { Glyph = "\uE896", FontSize = 14 },
+                                new TextBlock { Text = "导入恢复", FontSize = 13 }
+                            }
+                        },
+                        Style = (Microsoft.UI.Xaml.Style)Application.Current.Resources["AccentButtonStyle"],
+                        Tag = group,
+                        VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                    };
+                    importBtn.Click += ImportGame_Click;
+
+                    Grid.SetColumn(importBtn, 1);
+                    headerPanel.Children.Add(importBtn);
+                }
+                else if (!group.IsLocalGameExists)
+                {
+                    // 没有云端元数据时显示提示文字
+                    var hintText = new TextBlock
+                    {
+                        Text = "⚠ 缺少游戏信息，无法导入",
+                        FontSize = 12,
+                        Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed),
+                        VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                    };
+                    Grid.SetColumn(hintText, 1);
+                    headerPanel.Children.Add(hintText);
+                }
 
                 cardContent.Children.Add(headerPanel);
 
@@ -171,7 +217,7 @@ namespace GameSave.Views
                 // 存档项列表
                 foreach (var save in group.Saves)
                 {
-                    var saveItem = CreateSaveItemUI(save, group.GameId);
+                    var saveItem = CreateSaveItemUI(save, group);
                     cardContent.Children.Add(saveItem);
                 }
 
@@ -186,7 +232,7 @@ namespace GameSave.Views
         /// <summary>
         /// 创建单个存档项的 UI 元素
         /// </summary>
-        private UIElement CreateSaveItemUI(SaveFile save, string gameId)
+        private UIElement CreateSaveItemUI(SaveFile save, CloudSaveGroup group)
         {
             var grid = new Grid
             {
@@ -239,27 +285,52 @@ namespace GameSave.Views
                 VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
             };
 
-            // 下载按钮
-            var downloadBtn = new Button
+            if (!group.IsLocalGameExists && group.CloudGameMetadata != null)
             {
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
-                Content = new StackPanel
+                // 本地游戏不存在时：显示"恢复到本地"按钮（一键导入+恢复）
+                var restoreBtn = new Button
                 {
-                    Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
-                    Spacing = 4,
-                    Children =
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
+                    Content = new StackPanel
                     {
-                        new FontIcon { Glyph = "\uE896", FontSize = 13 },
-                        new TextBlock { Text = "下载", FontSize = 12 }
-                    }
-                },
-                Tag = save
-            };
-            downloadBtn.Click += DownloadSave_Click;
-            btnPanel.Children.Add(downloadBtn);
+                        Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                        Spacing = 4,
+                        Children =
+                        {
+                            new FontIcon { Glyph = "\uE896", FontSize = 13 },
+                            new TextBlock { Text = "恢复到本地", FontSize = 12 }
+                        }
+                    },
+                    Tag = new ImportRestoreContext { Group = group, Save = save }
+                };
+                restoreBtn.Click += ImportAndRestore_Click;
+                btnPanel.Children.Add(restoreBtn);
+            }
+            else
+            {
+                // 本地游戏已存在：显示正常的下载按钮
+                var downloadBtn = new Button
+                {
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
+                    Content = new StackPanel
+                    {
+                        Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal,
+                        Spacing = 4,
+                        Children =
+                        {
+                            new FontIcon { Glyph = "\uE896", FontSize = 13 },
+                            new TextBlock { Text = "下载", FontSize = 12 }
+                        }
+                    },
+                    Tag = save
+                };
+                downloadBtn.Click += DownloadSave_Click;
+                btnPanel.Children.Add(downloadBtn);
+            }
 
-            // 删除按钮
+            // 删除按钮（始终显示）
             var deleteBtn = new Button
             {
                 Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
@@ -279,6 +350,60 @@ namespace GameSave.Views
             grid.Children.Add(btnPanel);
 
             return grid;
+        }
+
+        /// <summary>
+        /// 导入游戏配置（仅导入，不恢复存档）
+        /// </summary>
+        private async void ImportGame_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is CloudSaveGroup group)
+            {
+                var (success, message) = await ViewModel.ImportGameFromCloudAsync(group);
+
+                var dialog = new ContentDialog
+                {
+                    Title = success ? "导入成功" : "导入失败",
+                    Content = message,
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await dialog.ShowAsync();
+
+                if (success)
+                {
+                    // 重新构建 UI 以更新按钮状态
+                    BuildSaveGroupsUI();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 导入游戏并恢复存档
+        /// </summary>
+        private async void ImportAndRestore_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ImportRestoreContext ctx)
+            {
+                DownloadProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                var (success, message) = await ViewModel.ImportAndRestoreAsync(ctx.Group, ctx.Save);
+                DownloadProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+                var dialog = new ContentDialog
+                {
+                    Title = success ? "恢复成功" : "恢复失败",
+                    Content = message,
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await dialog.ShowAsync();
+
+                if (success)
+                {
+                    // 重新构建 UI 以更新按钮状态
+                    BuildSaveGroupsUI();
+                }
+            }
         }
 
         /// <summary>
@@ -375,5 +500,14 @@ namespace GameSave.Views
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// 导入恢复上下文（用于按钮 Tag 传递数据）
+    /// </summary>
+    internal class ImportRestoreContext
+    {
+        public CloudSaveGroup Group { get; set; } = null!;
+        public SaveFile Save { get; set; } = null!;
     }
 }
