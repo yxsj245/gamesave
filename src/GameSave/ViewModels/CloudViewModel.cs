@@ -317,7 +317,13 @@ public partial class CloudViewModel : BaseViewModel
                 Tag = cloudSave.Tag
             };
 
-            await localStorage.RestoreSaveAsync(localSave);
+            var progress = new Progress<double>(p =>
+            {
+                DownloadProgress = p;
+                StatusMessage = $"正在将存档解压并恢复到本地: {p:F1}%";
+            });
+
+            await localStorage.RestoreSaveAsync(localSave, progress);
             StatusMessage = $"存档「{cloudSave.Name}」已恢复到本地";
             return (true, StatusMessage);
         }

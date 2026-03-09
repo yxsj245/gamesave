@@ -105,6 +105,32 @@ namespace GameSave.Views
                         RestoreWindow();
                         break;
 
+                    case GameRunStatus.Restoring:
+                        // 正在恢复 — 显示进度指示器
+                        StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        StatusBarIcon.Glyph = "\uE896"; // 恢复/下载图标
+                        StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                            Microsoft.UI.Colors.DodgerBlue);
+                        StatusBarText.Text = e.Message;
+                        StatusBarDetail.Text = "请勿关闭软件";
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        if (e.Progress.HasValue)
+                        {
+                            StatusBarProgress.IsIndeterminate = false;
+                            StatusBarProgress.Value = e.Progress.Value;
+                        }
+                        else
+                        {
+                            StatusBarProgress.IsIndeterminate = true;
+                        }
+
+                        StatusNavItem.Content = "正在恢复...";
+                        StatusIcon.Glyph = "\uE896";
+
+                        // 恢复窗口显示
+                        RestoreWindow();
+                        break;
+
                     case GameRunStatus.Uploading:
                         // 正在上传到云端 — 显示上传进度
                         StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;

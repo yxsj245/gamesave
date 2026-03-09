@@ -299,7 +299,7 @@ public class GameService
         {
             StatusChanged?.Invoke(this, new GameStatusInfo
             {
-                Status = GameRunStatus.BackingUp, // 使用 BackingUp 以利用已有的 UI 进度条
+                Status = GameRunStatus.Restoring,
                 GameName = game.Name,
                 GameId = game.Id,
                 Message = $"正在恢复 {game.Name} 的存档...",

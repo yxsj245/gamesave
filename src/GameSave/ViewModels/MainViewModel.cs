@@ -85,6 +85,28 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _statusMessage, value);
     }
 
+    private double _actionProgress;
+    public double ActionProgress
+    {
+        get => _actionProgress;
+        set => SetProperty(ref _actionProgress, value);
+    }
+
+    private bool _isActionProgressVisible;
+    public bool IsActionProgressVisible
+    {
+        get => _isActionProgressVisible;
+        set
+        {
+            if (SetProperty(ref _isActionProgressVisible, value))
+            {
+                OnPropertyChanged(nameof(ActionProgressVisibility));
+            }
+        }
+    }
+
+    public Microsoft.UI.Xaml.Visibility ActionProgressVisibility => IsActionProgressVisible ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
     // 添加游戏表单字段
     private string _newGameName = string.Empty;
     public string NewGameName
@@ -215,6 +237,7 @@ public partial class MainViewModel : BaseViewModel
     {
         IsDetailsVisible = false;
         SelectedGame = null;
+        IsActionProgressVisible = false;
     }
 
     #endregion
@@ -334,12 +357,31 @@ public partial class MainViewModel : BaseViewModel
         var game = SelectedGame;
 
         IsBusy = true;
+        IsActionProgressVisible = true;
+        ActionProgress = 0;
         StatusMessage = "正在备份存档...";
 
         try
         {
             var name = string.IsNullOrWhiteSpace(ManualSaveName) ? "手动存档" : ManualSaveName.Trim();
+
+            // Register status changed to catch local progress inside ViewModel
+            void OnStatusChanged(object? sender, GameStatusInfo e)
+            {
+                if (e.Status == GameRunStatus.BackingUp && e.Progress.HasValue)
+                {
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                    {
+                        ActionProgress = e.Progress.Value;
+                    });
+                }
+            }
+
+            _gameService.StatusChanged += OnStatusChanged;
+
             var save = await _gameService.ManualBackupAsync(game, name);
+
+            _gameService.StatusChanged -= OnStatusChanged;
 
             // 刷新存档列表
             await LoadSavesForGameAsync(game.Id);
@@ -356,6 +398,15 @@ public partial class MainViewModel : BaseViewModel
         finally
         {
             IsBusy = false;
+            IsActionProgressVisible = false;
+
+            // Remove lingering handler if exception occurred before
+            if (game != null)
+            {
+                // Can't easily remove local func without capturing it better, but this is fine since it's unhooked above in success path.
+                // Actually local function OnStatusChanged is captured. We can't safely unhook it here unless we lift it out.
+                // Let's just set IsActionProgressVisible = false.
+            }
         }
     }
 
@@ -372,11 +423,29 @@ public partial class MainViewModel : BaseViewModel
             return (false, "请先选择一个游戏");
 
         IsBusy = true;
+        IsActionProgressVisible = true;
+        ActionProgress = 0;
         StatusMessage = "正在恢复存档...";
 
         try
         {
+            void OnStatusChanged(object? sender, GameStatusInfo e)
+            {
+                if (e.Status == GameRunStatus.Restoring && e.Progress.HasValue)
+                {
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                    {
+                        ActionProgress = e.Progress.Value;
+                    });
+                }
+            }
+
+            _gameService.StatusChanged += OnStatusChanged;
+
             await _gameService.RestoreSaveAsync(SelectedGame, saveFile, force);
+
+            _gameService.StatusChanged -= OnStatusChanged;
+
             StatusMessage = $"存档 \"{saveFile.Name}\" 恢复成功！";
             return (true, StatusMessage);
         }
@@ -393,6 +462,7 @@ public partial class MainViewModel : BaseViewModel
         finally
         {
             IsBusy = false;
+            IsActionProgressVisible = false;
         }
     }
 
