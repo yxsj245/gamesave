@@ -70,9 +70,9 @@ namespace GameSave.Views
                         StatusBarIcon.Glyph = "\uE768"; // Play 图标
                         StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
                             Microsoft.UI.Colors.LimeGreen);
-                        StatusBarText.Text = $"🎮 {e.GameName} 运行中";
+                        StatusBarText.Text = $"{e.GameName} 运行中";
                         StatusBarDetail.Text = $"PID: {e.ProcessId}";
-                        StatusBarProgress.IsActive = false;
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
 
                         // 更新侧边栏状态
                         StatusNavItem.Content = $"{e.GameName} 运行中";
@@ -85,9 +85,18 @@ namespace GameSave.Views
                         StatusBarIcon.Glyph = "\uE898"; // 备份图标
                         StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
                             Microsoft.UI.Colors.Orange);
-                        StatusBarText.Text = $"📦 正在备份 {e.GameName} 的存档...";
+                        StatusBarText.Text = $"正在备份 {e.GameName} 的存档...";
                         StatusBarDetail.Text = "请勿关闭软件";
-                        StatusBarProgress.IsActive = true;
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        if (e.Progress.HasValue)
+                        {
+                            StatusBarProgress.IsIndeterminate = false;
+                            StatusBarProgress.Value = e.Progress.Value;
+                        }
+                        else
+                        {
+                            StatusBarProgress.IsIndeterminate = true;
+                        }
 
                         StatusNavItem.Content = "正在备份...";
                         StatusIcon.Glyph = "\uE898";
@@ -102,9 +111,18 @@ namespace GameSave.Views
                         StatusBarIcon.Glyph = "\uE753"; // 云端图标
                         StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
                             Microsoft.UI.Colors.DodgerBlue);
-                        StatusBarText.Text = $"☁️ 正在上传 {e.GameName} 存档到云端...";
+                        StatusBarText.Text = $"正在上传 {e.GameName} 存档到云端...";
                         StatusBarDetail.Text = "请勿关闭软件";
-                        StatusBarProgress.IsActive = true;
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        if (e.Progress.HasValue)
+                        {
+                            StatusBarProgress.IsIndeterminate = false;
+                            StatusBarProgress.Value = e.Progress.Value;
+                        }
+                        else
+                        {
+                            StatusBarProgress.IsIndeterminate = true;
+                        }
 
                         StatusNavItem.Content = "正在上传...";
                         StatusIcon.Glyph = "\uE753";
@@ -116,9 +134,9 @@ namespace GameSave.Views
                         StatusBarIcon.Glyph = "\uE73E"; // 对勾图标
                         StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
                             Microsoft.UI.Colors.LimeGreen);
-                        StatusBarText.Text = $"✅ {e.GameName} 存档备份完成";
+                        StatusBarText.Text = $"{e.GameName} 存档备份完成";
                         StatusBarDetail.Text = "";
-                        StatusBarProgress.IsActive = false;
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
 
                         StatusNavItem.Content = "备份完成";
                         StatusIcon.Glyph = "\uE73E";
@@ -128,7 +146,7 @@ namespace GameSave.Views
                     default:
                         // 空闲状态 — 隐藏状态栏
                         StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-                        StatusBarProgress.IsActive = false;
+                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
 
                         StatusNavItem.Content = "同步就绪";
                         StatusIcon.Glyph = "\uE895";

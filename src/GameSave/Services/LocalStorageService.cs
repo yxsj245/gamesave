@@ -60,7 +60,7 @@ public class LocalStorageService : IStorageService
     /// 创建存档备份
     /// 将游戏存档目录打包为 .tar 文件
     /// </summary>
-    public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null)
+    public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null)
     {
         if (!Directory.Exists(game.SaveFolderPath))
             throw new DirectoryNotFoundException($"游戏存档目录不存在: {game.SaveFolderPath}");
@@ -75,7 +75,7 @@ public class LocalStorageService : IStorageService
         var tarFilePath = Path.Combine(gameWorkDir, tarFileName);
 
         // 打包存档目录为 .tar
-        await TarHelper.CreateTarAsync(game.SaveFolderPath, tarFilePath);
+        await TarHelper.CreateTarAsync(game.SaveFolderPath, tarFilePath, progress);
 
         var fileInfo = new FileInfo(tarFilePath);
         var saveFile = new SaveFile
@@ -97,7 +97,7 @@ public class LocalStorageService : IStorageService
     /// 恢复存档
     /// 校验 .tar 文件，清空游戏存档目录后解压恢复
     /// </summary>
-    public async Task RestoreSaveAsync(SaveFile saveFile)
+    public async Task RestoreSaveAsync(SaveFile saveFile, IProgress<double>? progress = null)
     {
         // 校验 tar 文件有效性
         var isValid = await TarHelper.ValidateTarAsync(saveFile.Path);
@@ -116,7 +116,7 @@ public class LocalStorageService : IStorageService
         }
 
         // 解压 .tar 到游戏存档目录
-        await TarHelper.ExtractTarAsync(saveFile.Path, game.SaveFolderPath);
+        await TarHelper.ExtractTarAsync(saveFile.Path, game.SaveFolderPath, progress);
     }
 
     /// <summary>
@@ -138,7 +138,7 @@ public class LocalStorageService : IStorageService
     /// <summary>
     /// 创建退出存档（自动覆盖旧的退出存档）
     /// </summary>
-    public async Task<SaveFile> CreateExitSaveAsync(Game game)
+    public async Task<SaveFile> CreateExitSaveAsync(Game game, IProgress<double>? progress = null)
     {
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
 
@@ -149,7 +149,7 @@ public class LocalStorageService : IStorageService
         }
 
         // 创建新的退出存档
-        return await BackupSaveAsync(game, "退出存档", "游戏退出后自动备份");
+        return await BackupSaveAsync(game, "退出存档", "游戏退出后自动备份", progress);
     }
 
     /// <summary>

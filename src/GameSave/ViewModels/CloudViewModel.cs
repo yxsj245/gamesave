@@ -85,6 +85,21 @@ public partial class CloudViewModel : BaseViewModel
         set => SetProperty(ref _statusMessage, value);
     }
 
+    private double _downloadProgress;
+    /// <summary>下载进度</summary>
+    public double DownloadProgress
+    {
+        get => _downloadProgress;
+        set => SetProperty(ref _downloadProgress, value);
+    }
+
+    private bool _isDownloading;
+    public bool IsDownloading
+    {
+        get => _isDownloading;
+        set => SetProperty(ref _isDownloading, value);
+    }
+
     /// <summary>是否已选择云端配置</summary>
     public bool HasSelectedConfig => SelectedCloudConfig != null;
 
@@ -190,12 +205,20 @@ public partial class CloudViewModel : BaseViewModel
             return (false, "未选择云端配置");
 
         IsLoading = true;
+        IsDownloading = true;
+        DownloadProgress = 0;
         StatusMessage = $"正在下载存档 \"{cloudSave.Name}\"...";
 
         try
         {
+            var progress = new Progress<double>(p =>
+            {
+                DownloadProgress = p;
+                StatusMessage = $"正在下载: {p:F1}%";
+            });
+
             var cloudService = new CloudStorageService(SelectedCloudConfig, _configService);
-            var localPath = await cloudService.DownloadSaveToLocalAsync(cloudSave);
+            var localPath = await cloudService.DownloadSaveToLocalAsync(cloudSave, progress);
             StatusMessage = $"存档已下载到本地: {Path.GetFileName(localPath)}";
             return (true, StatusMessage);
         }
@@ -207,6 +230,7 @@ public partial class CloudViewModel : BaseViewModel
         finally
         {
             IsLoading = false;
+            IsDownloading = false;
         }
     }
 

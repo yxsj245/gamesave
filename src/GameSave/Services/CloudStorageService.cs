@@ -119,7 +119,7 @@ public class CloudStorageService : IStorageService
     /// <param name="game">游戏信息</param>
     /// <param name="backupName">备份名称（用于构造文件名）</param>
     /// <param name="description">描述</param>
-    public Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null)
+    public Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null)
     {
         // 此方法在云端场景下用于上传：先找本地最新对应名称的存档，再上传
         // 但更推荐使用 UploadSaveFileAsync 直接上传指定的本地存档文件
@@ -131,7 +131,8 @@ public class CloudStorageService : IStorageService
     /// </summary>
     /// <param name="localSaveFile">本地存档文件信息</param>
     /// <param name="game">游戏信息</param>
-    public async Task<SaveFile> UploadSaveFileAsync(SaveFile localSaveFile, Game game)
+    /// <param name="progress">上传进度回调</param>
+    public async Task<SaveFile> UploadSaveFileAsync(SaveFile localSaveFile, Game game, IProgress<double>? progress = null)
     {
         if (!File.Exists(localSaveFile.Path))
             throw new FileNotFoundException($"本地存档文件不存在: {localSaveFile.Path}");
@@ -140,7 +141,7 @@ public class CloudStorageService : IStorageService
         var ossKey = $"{game.Id}/{tarFileName}";
 
         using var provider = CreateProvider();
-        await provider.UploadFileAsync(localSaveFile.Path, ossKey);
+        await provider.UploadFileAsync(localSaveFile.Path, ossKey, progress);
 
         var fileInfo = new FileInfo(localSaveFile.Path);
         return new SaveFile
@@ -160,14 +161,15 @@ public class CloudStorageService : IStorageService
     /// 从云端下载存档到本地工作目录
     /// </summary>
     /// <param name="cloudSaveFile">云端存档信息（Path 为 OSS Key）</param>
-    public async Task<string> DownloadSaveToLocalAsync(SaveFile cloudSaveFile)
+    /// <param name="progress">下载进度回调</param>
+    public async Task<string> DownloadSaveToLocalAsync(SaveFile cloudSaveFile, IProgress<double>? progress = null)
     {
         var localDir = _configService.GetGameWorkDirectory(cloudSaveFile.GameId);
         var tarFileName = Path.GetFileName(cloudSaveFile.Path);
         var localFilePath = Path.Combine(localDir, tarFileName);
 
         using var provider = CreateProvider();
-        await provider.DownloadFileAsync(cloudSaveFile.Path, localFilePath);
+        await provider.DownloadFileAsync(cloudSaveFile.Path, localFilePath, progress);
 
         return localFilePath;
     }
@@ -175,10 +177,10 @@ public class CloudStorageService : IStorageService
     /// <summary>
     /// 恢复云端存档（先下载到本地，再由 LocalStorageService 解压恢复）
     /// </summary>
-    public async Task RestoreSaveAsync(SaveFile saveFile)
+    public async Task RestoreSaveAsync(SaveFile saveFile, IProgress<double>? progress = null)
     {
         // 下载到本地工作目录
-        await DownloadSaveToLocalAsync(saveFile);
+        await DownloadSaveToLocalAsync(saveFile, progress);
         // 恢复操作由调用方配合 LocalStorageService 完成
     }
 

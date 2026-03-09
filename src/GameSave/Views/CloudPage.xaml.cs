@@ -31,6 +31,20 @@ namespace GameSave.Views
             {
                 CloudConfigComboBox.SelectedIndex = 0;
             }
+
+            ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        }
+
+        private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ViewModel.StatusMessage))
+            {
+                // Ensure UI thread update
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    StatusText.Text = ViewModel.StatusMessage;
+                });
+            }
         }
 
         /// <summary>
@@ -274,7 +288,9 @@ namespace GameSave.Views
         {
             if (sender is Button btn && btn.Tag is SaveFile save)
             {
+                DownloadProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                 var (success, message) = await ViewModel.DownloadSaveAsync(save);
+                DownloadProgressBar.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
 
                 var dialog = new ContentDialog
                 {

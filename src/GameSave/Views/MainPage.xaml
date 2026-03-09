@@ -60,37 +60,42 @@
                         Visibility="Collapsed"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="0,1,0,0"
-                        Padding="16,10">
+                        BorderThickness="0,1,0,0">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Grid Grid.Row="0" Padding="16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <!-- 状态图标 -->
-                        <FontIcon x:Name="StatusBarIcon" Grid.Column="0" 
-                                  Glyph="&#xE768;" FontSize="16" 
-                                  Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                                  VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <!-- 状态图标 -->
+                            <FontIcon x:Name="StatusBarIcon" Grid.Column="0" 
+                                      Glyph="&#xE768;" FontSize="16" 
+                                      Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                      VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                        <!-- 状态文本 -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="StatusBarText" 
-                                       Text="游戏运行中" 
-                                       FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="StatusBarDetail" 
-                                       Text="" 
-                                       FontSize="11" Foreground="Gray"/>
-                        </StackPanel>
+                            <!-- 状态文本 -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="StatusBarText" 
+                                           Text="游戏运行中" 
+                                           FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="StatusBarDetail" 
+                                           Text="" 
+                                           FontSize="11" Foreground="Gray"/>
+                            </StackPanel>
+                        </Grid>
 
-                        <!-- 备份进度指示器 -->
-                        <ProgressRing x:Name="StatusBarProgress" 
-                                      Grid.Column="2" 
-                                      IsActive="False" 
-                                      Width="20" Height="20"
-                                      VerticalAlignment="Center"/>
+                        <!-- 进度指示器 -->
+                        <ProgressBar x:Name="StatusBarProgress" 
+                                     Grid.Row="1" 
+                                     IsIndeterminate="False"
+                                     Visibility="Collapsed"
+                                     VerticalAlignment="Bottom"/>
                     </Grid>
                 </Border>
             </Grid>

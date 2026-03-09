@@ -32,6 +32,7 @@ public class GameStatusInfo
     public string GameId { get; set; } = string.Empty;
     public int ProcessId { get; set; }
     public string Message { get; set; } = string.Empty;
+    public double? Progress { get; set; }
 }
 
 /// <summary>
@@ -185,7 +186,19 @@ public class GameService
                 if (Directory.Exists(game.SaveFolderPath) &&
                     Directory.EnumerateFiles(game.SaveFolderPath, "*", SearchOption.AllDirectories).Any())
                 {
-                    save = await _localStorageService.CreateExitSaveAsync(game);
+                    var progress = new Progress<double>(p =>
+                    {
+                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        {
+                            Status = GameRunStatus.BackingUp,
+                            GameName = game.Name,
+                            GameId = game.Id,
+                            Message = $"游戏 {game.Name} 已退出，正在备份存档...",
+                            Progress = p
+                        });
+                    });
+
+                    save = await _localStorageService.CreateExitSaveAsync(game, progress);
                     BackupCompleted?.Invoke(this, save);
                 }
             }
@@ -233,7 +246,20 @@ public class GameService
     public async Task<SaveFile> ManualBackupAsync(Game game, string? saveName = null)
     {
         var name = string.IsNullOrWhiteSpace(saveName) ? "手动存档" : saveName;
-        var save = await _localStorageService.BackupSaveAsync(game, name);
+
+        var progress = new Progress<double>(p =>
+        {
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.BackingUp,
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = $"正在手动备份 {game.Name}...",
+                Progress = p
+            });
+        });
+
+        var save = await _localStorageService.BackupSaveAsync(game, name, null, progress);
         BackupCompleted?.Invoke(this, save);
 
         // 手动备份完成后，后台上传到云端（不阻塞备份结果返回）
@@ -269,7 +295,39 @@ public class GameService
             throw new GameRunningException("检测到游戏仍然在运行，除非你非常了解此游戏的存档机制，否则可能导致存档损坏！");
         }
 
-        await _localStorageService.RestoreSaveAsync(saveFile);
+        var progress = new Progress<double>(p =>
+        {
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.BackingUp, // 使用 BackingUp 以利用已有的 UI 进度条
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = $"正在恢复 {game.Name} 的存档...",
+                Progress = p
+            });
+        });
+
+        await _localStorageService.RestoreSaveAsync(saveFile, progress);
+
+        // 通知恢复完成
+        StatusChanged?.Invoke(this, new GameStatusInfo
+        {
+            Status = GameRunStatus.Completed,
+            GameName = game.Name,
+            GameId = game.Id,
+            Message = $"已成功恢复 {game.Name} 的存档"
+        });
+
+        // 短暂延迟后恢复空闲
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Idle,
+                Message = "同步就绪"
+            });
+        });
     }
 
     /// <summary>
@@ -328,17 +386,20 @@ public class GameService
 
         try
         {
-            // 通知：正在上传
-            StatusChanged?.Invoke(this, new GameStatusInfo
+            var progressHandler = new Progress<double>(p =>
             {
-                Status = GameRunStatus.Uploading,
-                GameName = game.Name,
-                GameId = game.Id,
-                Message = $"正在上传 {game.Name} 存档到云端..."
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Uploading,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = $"正在上传 {game.Name} 存档到云端...",
+                    Progress = p
+                });
             });
 
             var cloudService = new CloudStorageService(cloudConfig, _configService);
-            await cloudService.UploadSaveFileAsync(save, game);
+            await cloudService.UploadSaveFileAsync(save, game, progressHandler);
 
             System.Diagnostics.Debug.WriteLine($"[云端同步] {game.Name} 存档已上传到 {cloudConfig.DisplayName}");
 
@@ -348,7 +409,7 @@ public class GameService
                 Status = GameRunStatus.Completed,
                 GameName = game.Name,
                 GameId = game.Id,
-                Message = $"☁️ {game.Name} 存档已同步到云端"
+                Message = $"{game.Name} 存档已同步到云端"
             });
 
             // 短暂延迟后恢复空闲

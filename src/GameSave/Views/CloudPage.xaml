@@ -88,10 +88,16 @@
         </ScrollViewer>
 
         <!-- 底部状态栏 -->
-        <TextBlock x:Name="StatusText" 
-                   Grid.Row="1" 
-                   VerticalAlignment="Bottom" HorizontalAlignment="Left"
-                   FontSize="12" Foreground="Gray"
-                   Margin="0,0,0,4"/>
+        <StackPanel Grid.Row="1" VerticalAlignment="Bottom" Margin="0,0,0,4" Spacing="4">
+            <TextBlock x:Name="StatusText" 
+                       HorizontalAlignment="Left"
+                       FontSize="12" Foreground="Gray" />
+            
+            <ProgressBar x:Name="DownloadProgressBar"
+                         Visibility="Collapsed"
+                         IsIndeterminate="False"
+                         Value="{x:Bind ViewModel.DownloadProgress, Mode=OneWay}"
+                         HorizontalAlignment="Stretch" />
+        </StackPanel>
     </Grid>
 </Page>

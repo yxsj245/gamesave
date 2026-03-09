@@ -40,12 +40,27 @@ public class OssStorageProvider : IDisposable
     /// </summary>
     /// <param name="localFilePath">本地文件路径</param>
     /// <param name="ossKey">OSS 对象键（不含 basePath 前缀，如 gameId/xxx.tar）</param>
-    public Task UploadFileAsync(string localFilePath, string ossKey)
+    /// <param name="progress">进度报告回调</param>
+    public Task UploadFileAsync(string localFilePath, string ossKey, IProgress<double>? progress = null)
     {
         return Task.Run(() =>
         {
             var fullKey = _basePath + ossKey;
-            _client.PutObject(_bucketName, fullKey, localFilePath);
+
+            using (var fileStream = File.OpenRead(localFilePath))
+            {
+                if (progress != null)
+                {
+                    progress.Report(0);
+                    using var progressStream = new ProgressStream(fileStream, progress);
+                    _client.PutObject(_bucketName, fullKey, progressStream);
+                }
+                else
+                {
+                    _client.PutObject(_bucketName, fullKey, fileStream);
+                }
+            }
+
             System.Diagnostics.Debug.WriteLine($"[OSS] 上传完成: {fullKey}");
         });
     }
@@ -55,11 +70,13 @@ public class OssStorageProvider : IDisposable
     /// </summary>
     /// <param name="ossKey">OSS 对象键（不含 basePath 前缀）</param>
     /// <param name="localFilePath">本地保存路径</param>
-    public Task DownloadFileAsync(string ossKey, string localFilePath)
+    /// <param name="progress">进度报告回调</param>
+    public Task DownloadFileAsync(string ossKey, string localFilePath, IProgress<double>? progress = null)
     {
         return Task.Run(() =>
         {
             var fullKey = _basePath + ossKey;
+
             var result = _client.GetObject(_bucketName, fullKey);
 
             // 确保本地目录存在
@@ -69,7 +86,24 @@ public class OssStorageProvider : IDisposable
 
             using var responseStream = result.Content;
             using var fileStream = File.Create(localFilePath);
-            responseStream.CopyTo(fileStream);
+
+            long totalBytes = result.ContentLength;
+            long totalRead = 0;
+            byte[] buffer = new byte[81920]; // 80KB buffer
+            int read;
+
+            if (progress != null) progress.Report(0);
+
+            while ((read = responseStream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                fileStream.Write(buffer, 0, read);
+                totalRead += read;
+                if (progress != null && totalBytes > 0)
+                {
+                    double pct = (double)totalRead / totalBytes * 100;
+                    progress.Report(Math.Min(100, pct));
+                }
+            }
 
             System.Diagnostics.Debug.WriteLine($"[OSS] 下载完成: {fullKey} -> {localFilePath}");
         });
@@ -186,6 +220,48 @@ public class OssStorageProvider : IDisposable
         // OssClient 不需要显式 Dispose，但保留接口以便将来扩展
         GC.SuppressFinalize(this);
     }
+}
+
+/// <summary>
+/// 带进度报告的包装流
+/// </summary>
+public class ProgressStream : Stream
+{
+    private readonly Stream _base;
+    private readonly IProgress<double> _progress;
+    private readonly long _length;
+    private long _position;
+
+    public ProgressStream(Stream baseStream, IProgress<double> progress)
+    {
+        _base = baseStream;
+        _progress = progress;
+        _length = baseStream.Length;
+    }
+
+    public override bool CanRead => _base.CanRead;
+    public override bool CanSeek => _base.CanSeek;
+    public override bool CanWrite => _base.CanWrite;
+    public override long Length => _length;
+    public override long Position { get => _base.Position; set => _base.Position = value; }
+
+    public override void Flush() => _base.Flush();
+    public override long Seek(long offset, SeekOrigin origin) => _base.Seek(offset, origin);
+    public override void SetLength(long value) => _base.SetLength(value);
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        int read = _base.Read(buffer, offset, count);
+        if (read > 0)
+        {
+            _position += read;
+            if (_length > 0)
+                _progress.Report(Math.Min(100.0, (double)_position / _length * 100));
+        }
+        return read;
+    }
+
+    public override void Write(byte[] buffer, int offset, int count) => _base.Write(buffer, offset, count);
 }
 
 /// <summary>
