@@ -127,17 +127,12 @@ namespace GameSave.Views
 
             foreach (var group in ViewModel.SaveGroups)
             {
-                // 游戏分组卡片
-                var card = new Border
+                var expander = new Expander
                 {
-                    Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-                    CornerRadius = new Microsoft.UI.Xaml.CornerRadius(8),
-                    BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
-                    BorderThickness = new Microsoft.UI.Xaml.Thickness(1),
-                    Padding = new Microsoft.UI.Xaml.Thickness(20)
+                    IsExpanded = false,
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch
                 };
-
-                var cardContent = new StackPanel { Spacing = 12 };
 
                 // 游戏名称标题行
                 var headerPanel = new Grid();
@@ -246,25 +241,19 @@ namespace GameSave.Views
                 Grid.SetColumn(rightPanel, 1);
                 headerPanel.Children.Add(rightPanel);
 
-                cardContent.Children.Add(headerPanel);
+                expander.Header = headerPanel;
 
-                // 分隔线
-                cardContent.Children.Add(new Border
-                {
-                    Height = 1,
-                    Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
-                    Margin = new Microsoft.UI.Xaml.Thickness(0, 4, 0, 4)
-                });
+                var savesContent = new StackPanel { Spacing = 12, Padding = new Microsoft.UI.Xaml.Thickness(0, 12, 0, 0) };
 
                 // 存档项列表
                 foreach (var save in group.Saves)
                 {
                     var saveItem = CreateSaveItemUI(save, group);
-                    cardContent.Children.Add(saveItem);
+                    savesContent.Children.Add(saveItem);
                 }
 
-                card.Child = cardContent;
-                groupPanels.Children.Add(card);
+                expander.Content = savesContent;
+                groupPanels.Children.Add(expander);
             }
 
             // 用一个手动的方式替换 ItemsRepeater（因为动态数据模板在代码后端更灵活）

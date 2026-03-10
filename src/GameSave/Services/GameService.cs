@@ -10,6 +10,8 @@ public enum GameRunStatus
 {
     /// <summary>空闲</summary>
     Idle,
+    /// <summary>正在启动游戏（检查存档、恢复存档、启动进程）</summary>
+    Launching,
     /// <summary>正在恢复存档</summary>
     Restoring,
     /// <summary>游戏运行中</summary>
@@ -114,13 +116,47 @@ public class GameService
         if (string.IsNullOrWhiteSpace(game.ProcessPath))
             throw new InvalidOperationException("未设置游戏启动进程路径");
 
+        // 通知：开始启动游戏流程
+        StatusChanged?.Invoke(this, new GameStatusInfo
+        {
+            Status = GameRunStatus.Launching,
+            GameName = game.Name,
+            GameId = game.Id,
+            Message = $"正在检查 {game.Name} 的本地存档...",
+            Progress = 0
+        });
+
         // 1. 查找最新退出存档
         var latestExitSave = await _localStorageService.GetLatestExitSaveAsync(game.Id);
+
+        // 更新进度：存档检查完成
+        StatusChanged?.Invoke(this, new GameStatusInfo
+        {
+            Status = GameRunStatus.Launching,
+            GameName = game.Name,
+            GameId = game.Id,
+            Message = latestExitSave != null
+                ? $"发现 {game.Name} 的退出存档，正在校验..."
+                : $"{game.Name} 无本地存档，准备启动...",
+            Progress = 20
+        });
 
         if (latestExitSave != null)
         {
             // 校验 .tar 文件有效性
             var isValid = await TarHelper.ValidateTarAsync(latestExitSave.Path);
+
+            // 更新进度：校验完成
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Launching,
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = isValid
+                    ? $"{game.Name} 存档校验通过，正在恢复..."
+                    : $"{game.Name} 存档校验失败",
+                Progress = 40
+            });
 
             if (!isValid)
             {
@@ -128,21 +164,69 @@ public class GameService
                 if (onTarInvalid != null)
                 {
                     var shouldContinue = await onTarInvalid();
-                    if (!shouldContinue) return false;
+                    if (!shouldContinue)
+                    {
+                        // 用户取消，恢复空闲状态
+                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        {
+                            Status = GameRunStatus.Idle,
+                            GameName = game.Name,
+                            GameId = game.Id,
+                            Message = "启动已取消"
+                        });
+                        return false;
+                    }
                 }
             }
             else
             {
-                // 清空存档目录并恢复
+                // 清空存档目录
                 if (Directory.Exists(game.SaveFolderPath))
                 {
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Launching,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"正在清空 {game.Name} 的存档目录...",
+                        Progress = 50
+                    });
                     ClearDirectory(game.SaveFolderPath);
                 }
+
+                // 解压存档
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Launching,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = $"正在解压存档到 {game.Name} 的存档目录...",
+                    Progress = 60
+                });
                 await TarHelper.ExtractTarAsync(latestExitSave.Path, game.SaveFolderPath);
+
+                // 更新进度：解压完成
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Launching,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = $"{game.Name} 存档恢复完成，正在启动游戏...",
+                    Progress = 80
+                });
             }
         }
 
         // 2. 启动游戏进程
+        StatusChanged?.Invoke(this, new GameStatusInfo
+        {
+            Status = GameRunStatus.Launching,
+            GameName = game.Name,
+            GameId = game.Id,
+            Message = $"正在启动 {game.Name}...",
+            Progress = 90
+        });
+
         var process = _processMonitorService.LaunchProcess(game.ProcessPath, game.ProcessArgs);
         if (process == null)
             throw new InvalidOperationException("启动游戏进程失败");
@@ -152,7 +236,7 @@ public class GameService
         RunningProcessId = process.Id;
         game.IsRunning = true;
 
-        // 通知：游戏运行中
+        // 通知：游戏运行中（启动完成，进度100%）
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Running,
