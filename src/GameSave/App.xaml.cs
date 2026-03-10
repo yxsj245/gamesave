@@ -37,6 +37,7 @@ namespace GameSave
         public static ProcessMonitorService ProcessMonitorService { get; } = new();
         public static LocalStorageService LocalStorageService { get; private set; } = null!;
         public static GameService GameService { get; private set; } = null!;
+        public static ScheduledBackupService ScheduledBackupService { get; private set; } = null!;
 
         public App()
         {
@@ -45,6 +46,7 @@ namespace GameSave
             // 初始化服务依赖链
             LocalStorageService = new LocalStorageService(ConfigService);
             GameService = new GameService(ConfigService, LocalStorageService, ProcessMonitorService);
+            ScheduledBackupService = new ScheduledBackupService(GameService, LocalStorageService, ConfigService);
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {

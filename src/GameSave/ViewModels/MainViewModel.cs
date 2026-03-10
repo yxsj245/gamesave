@@ -9,6 +9,7 @@ public partial class MainViewModel : BaseViewModel
     private readonly ConfigService _configService;
     private readonly LocalStorageService _localStorageService;
     private readonly GameService _gameService;
+    private readonly ScheduledBackupService _scheduledBackupService;
 
     public MainViewModel()
     {
@@ -16,6 +17,7 @@ public partial class MainViewModel : BaseViewModel
         _configService = App.ConfigService;
         _localStorageService = App.LocalStorageService;
         _gameService = App.GameService;
+        _scheduledBackupService = App.ScheduledBackupService;
 
         // 监听游戏退出事件，刷新存档列表
         // 注意：GameExited 事件从后台线程触发，必须调度回 UI 线程更新绑定属性
@@ -164,6 +166,28 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _manualSaveName, value);
     }
 
+    // 定时备份表单字段
+    private bool _newGameScheduledBackupEnabled;
+    public bool NewGameScheduledBackupEnabled
+    {
+        get => _newGameScheduledBackupEnabled;
+        set => SetProperty(ref _newGameScheduledBackupEnabled, value);
+    }
+
+    private int _newGameScheduledBackupInterval = 30;
+    public int NewGameScheduledBackupInterval
+    {
+        get => _newGameScheduledBackupInterval;
+        set => SetProperty(ref _newGameScheduledBackupInterval, value);
+    }
+
+    private int _newGameScheduledBackupMaxCount = 5;
+    public int NewGameScheduledBackupMaxCount
+    {
+        get => _newGameScheduledBackupMaxCount;
+        set => SetProperty(ref _newGameScheduledBackupMaxCount, value);
+    }
+
     #endregion
 
     #region 初始化
@@ -259,6 +283,9 @@ public partial class MainViewModel : BaseViewModel
         NewGameProcessPath = string.Empty;
         NewGameProcessArgs = string.Empty;
         SelectedCloudConfigId = null;
+        NewGameScheduledBackupEnabled = false;
+        NewGameScheduledBackupInterval = 30;
+        NewGameScheduledBackupMaxCount = 5;
     }
 
     /// <summary>
@@ -290,7 +317,10 @@ public partial class MainViewModel : BaseViewModel
                 ProcessPath = string.IsNullOrWhiteSpace(NewGameProcessPath) ? null : NewGameProcessPath.Trim(),
                 ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
                 CloudConfigId = SelectedCloudConfigId,
-                IconPath = "\uE7FC"
+                IconPath = "\uE7FC",
+                ScheduledBackupEnabled = NewGameScheduledBackupEnabled,
+                ScheduledBackupIntervalMinutes = NewGameScheduledBackupInterval,
+                ScheduledBackupMaxCount = NewGameScheduledBackupMaxCount
             };
 
             await _gameService.AddGameAsync(game);
@@ -347,6 +377,23 @@ public partial class MainViewModel : BaseViewModel
             if (index >= 0)
             {
                 Games[index] = game;
+            }
+
+            // 更新定时备份状态：对于无启动进程的游戏，更新配置后重新启停定时备份
+            // 有启动进程的游戏定时备份跟随游戏生命周期，不在此处理
+            if (!game.HasProcessPath)
+            {
+                if (game.ScheduledBackupEnabled && game.IsScheduledBackupRunning)
+                {
+                    // 配置变更后重启定时备份（应用新的间隔/数量设置）
+                    _scheduledBackupService.StopScheduledBackup(game.Id);
+                    _scheduledBackupService.StartScheduledBackup(game);
+                }
+                else if (!game.ScheduledBackupEnabled && game.IsScheduledBackupRunning)
+                {
+                    // 禁用了定时备份，停止运行中的定时任务
+                    _scheduledBackupService.StopScheduledBackup(game.Id);
+                }
             }
 
             StatusMessage = $"游戏「{game.Name}」信息已更新";
@@ -780,6 +827,31 @@ public partial class MainViewModel : BaseViewModel
         {
             IsBusy = false;
         }
+    }
+
+    #endregion
+
+    #region 定时备份手动控制
+
+    /// <summary>
+    /// 手动启动指定游戏的定时备份（仅对无启动进程的游戏有效）
+    /// </summary>
+    public void StartScheduledBackupManual(Game game)
+    {
+        if (game.HasProcessPath || !game.ScheduledBackupEnabled)
+            return;
+
+        _scheduledBackupService.StartScheduledBackup(game);
+        StatusMessage = $"已启动「{game.Name}」的定时备份（每 {game.ScheduledBackupIntervalMinutes} 分钟）";
+    }
+
+    /// <summary>
+    /// 手动停止指定游戏的定时备份（仅对无启动进程的游戏有效）
+    /// </summary>
+    public void StopScheduledBackupManual(Game game)
+    {
+        _scheduledBackupService.StopScheduledBackup(game.Id);
+        StatusMessage = $"已停止「{game.Name}」的定时备份";
     }
 
     #endregion

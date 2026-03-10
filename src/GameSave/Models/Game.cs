@@ -46,6 +46,41 @@ public class Game : INotifyPropertyChanged
     /// <summary>备注</summary>
     public string? Notes { get; set; }
 
+    /// <summary>是否启用定时备份</summary>
+    public bool ScheduledBackupEnabled { get; set; } = false;
+
+    /// <summary>定时备份间隔（分钟）</summary>
+    public int ScheduledBackupIntervalMinutes { get; set; } = 30;
+
+    /// <summary>定时备份最大保留数量</summary>
+    public int ScheduledBackupMaxCount { get; set; } = 5;
+
+    private bool _isScheduledBackupRunning;
+    /// <summary>定时备份是否正在运行（运行时状态，不序列化）</summary>
+    [JsonIgnore]
+    public bool IsScheduledBackupRunning
+    {
+        get => _isScheduledBackupRunning;
+        set
+        {
+            if (_isScheduledBackupRunning != value)
+            {
+                _isScheduledBackupRunning = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CanShowScheduledBackupStart));
+                OnPropertyChanged(nameof(CanShowScheduledBackupStop));
+            }
+        }
+    }
+
+    /// <summary>是否显示手动启动定时备份按钮（无启动进程 + 已启用定时备份 + 未运行中）</summary>
+    [JsonIgnore]
+    public bool CanShowScheduledBackupStart => !HasProcessPath && ScheduledBackupEnabled && !IsScheduledBackupRunning;
+
+    /// <summary>是否显示手动停止定时备份按钮（无启动进程 + 已启用定时备份 + 运行中）</summary>
+    [JsonIgnore]
+    public bool CanShowScheduledBackupStop => !HasProcessPath && ScheduledBackupEnabled && IsScheduledBackupRunning;
+
     /// <summary>是否设置了启动进程路径</summary>
     [JsonIgnore]
     public bool HasProcessPath => !string.IsNullOrWhiteSpace(ProcessPath);

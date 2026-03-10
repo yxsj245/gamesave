@@ -260,6 +260,35 @@
                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
+
+                                        <!-- 定时备份手动启动按钮（无启动进程 + 已启用 + 未运行中） -->
+                                        <Button VerticalAlignment="Center"
+                                                Click="ListItemStartScheduledBackup_Click"
+                                                Visibility="{x:Bind CanShowScheduledBackupStart, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
+                                                ToolTipService.ToolTip="启动定时备份"
+                                                Width="40" Height="40" Padding="0">
+                                            <FontIcon Glyph="&#xE823;" FontSize="16" Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                        </Button>
+
+                                        <!-- 定时备份运行中指示 + 停止按钮 -->
+                                        <StackPanel Orientation="Horizontal" 
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind CanShowScheduledBackupStop, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}">
+                                            <ProgressRing IsActive="True" Width="16" Height="16" />
+                                            <TextBlock Text="定时备份中" 
+                                                       FontSize="12" 
+                                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <Button VerticalAlignment="Center"
+                                                    Click="ListItemStopScheduledBackup_Click"
+                                                    ToolTipService.ToolTip="停止定时备份"
+                                                    Width="32" Height="32" Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}">
+                                                <FontIcon Glyph="&#xE711;" FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                            </Button>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Grid>
                             </Grid>

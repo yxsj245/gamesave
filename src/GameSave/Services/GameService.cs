@@ -78,6 +78,9 @@ public class GameService
         _processMonitorService = processMonitorService;
     }
 
+    /// <summary>获取定时备份服务（延迟获取，避免循环依赖）</summary>
+    private ScheduledBackupService ScheduledBackup => App.ScheduledBackupService;
+
     /// <summary>
     /// 添加游戏全流程
     /// 1. 在工作目录下创建以 GUID 命名的子目录
@@ -257,6 +260,12 @@ public class GameService
         game.RunningPid = process.Id; // 设置进程 PID 供列表项显示
         game.LaunchStatusMessage = string.Empty; // 启动完成，清空启动状态消息
 
+        // 启动定时备份（如果已配置）
+        if (game.ScheduledBackupEnabled)
+        {
+            ScheduledBackup.StartScheduledBackup(game);
+        }
+
         // 通知：游戏运行中（启动完成，进度100%）
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
@@ -276,6 +285,9 @@ public class GameService
             RunningGameId = null;
             RunningProcessId = 0;
             RunningProcessName = null;
+
+            // 停止定时备份
+            ScheduledBackup.StopScheduledBackup(game.Id);
 
             // 使用应用主窗口的 DispatcherQueue 回到 UI 线程更新属性
             var dispatcherQueue = App.MainWindow?.DispatcherQueue;
@@ -521,6 +533,9 @@ public class GameService
     /// </summary>
     public async Task DeleteGameAsync(Game game)
     {
+        // 停止定时备份
+        ScheduledBackup.StopScheduledBackup(game.Id);
+
         // 直接拼路径，不调用 GetGameWorkDirectory（那个方法会自动创建目录）
         var gameWorkDir = Path.Combine(_configService.WorkDirectory, game.Id);
 

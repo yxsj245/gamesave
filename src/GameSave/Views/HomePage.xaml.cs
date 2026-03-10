@@ -189,6 +189,24 @@ namespace GameSave.Views
             ViewModel.CloseDetails();
         }
 
+        /// <summary>列表项 - 启动定时备份</summary>
+        private void ListItemStartScheduledBackup_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is Game game)
+            {
+                ViewModel.StartScheduledBackupManual(game);
+            }
+        }
+
+        /// <summary>列表项 - 停止定时备份</summary>
+        private void ListItemStopScheduledBackup_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is Game game)
+            {
+                ViewModel.StopScheduledBackupManual(game);
+            }
+        }
+
         #endregion
 
         #region 添加游戏
@@ -206,7 +224,22 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 500
+            };
+
             var panel = new StackPanel { Spacing = 12, MinWidth = 400 };
+
+            // ========== 基本信息组 ==========
+            panel.Children.Add(new TextBlock
+            {
+                Text = "基本信息",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
 
             // 游戏名称
             var nameBox = new TextBox
@@ -321,7 +354,83 @@ namespace GameSave.Views
                 panel.Children.Add(cloudConfigComboBox);
             }
 
-            dialog.Content = panel;
+            // ========== 定时备份组 ==========
+            // 分隔线
+            panel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 4)
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "定时备份",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
+
+            // 定时备份开关
+            var scheduledBackupToggle = new ToggleSwitch
+            {
+                Header = "启用定时备份",
+                IsOn = false,
+                OnContent = "已启用",
+                OffContent = "已关闭"
+            };
+            panel.Children.Add(scheduledBackupToggle);
+
+            // 定时备份说明（根据是否填了进程动态显示）
+            var scheduledBackupDesc = new TextBlock
+            {
+                Text = "有启动进程：游戏运行时自动开始，退出后停止\n无启动进程：在游戏列表中手动控制启停",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            panel.Children.Add(scheduledBackupDesc);
+
+            // 备份间隔
+            var intervalBox = new NumberBox
+            {
+                Header = "备份间隔（分钟）",
+                Value = 30,
+                Minimum = 1,
+                Maximum = 1440,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            panel.Children.Add(intervalBox);
+
+            // 最大备份数量
+            var maxCountBox = new NumberBox
+            {
+                Header = "最大备份数量",
+                Value = 5,
+                Minimum = 1,
+                Maximum = 100,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            panel.Children.Add(maxCountBox);
+
+            // 开关控制子控件显示
+            scheduledBackupToggle.Toggled += (s, args) =>
+            {
+                var vis = scheduledBackupToggle.IsOn
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+                scheduledBackupDesc.Visibility = vis;
+                intervalBox.Visibility = vis;
+                maxCountBox.Visibility = vis;
+            };
+
+            scrollViewer.Content = panel;
+            dialog.Content = scrollViewer;
 
             var result = await dialog.ShowWithThemeAsync();
 
@@ -341,6 +450,11 @@ namespace GameSave.Views
                 {
                     ViewModel.SelectedCloudConfigId = null;
                 }
+
+                // 设置定时备份参数
+                ViewModel.NewGameScheduledBackupEnabled = scheduledBackupToggle.IsOn;
+                ViewModel.NewGameScheduledBackupInterval = (int)intervalBox.Value;
+                ViewModel.NewGameScheduledBackupMaxCount = (int)maxCountBox.Value;
 
                 var success = await ViewModel.AddGameAsync();
                 if (success)
@@ -733,9 +847,22 @@ namespace GameSave.Views
             var game = GetGameFromContext(sender);
             if (game == null) return;
 
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 500
+            };
+
             var panel = new StackPanel { Spacing = 12, MinWidth = 400 };
 
-            // 游戏名称
+            // ========== 基本信息组 ==========
+            panel.Children.Add(new TextBlock
+            {
+                Text = "基本信息",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
             var nameBox = new TextBox
             {
                 Header = "游戏名称 *",
@@ -834,6 +961,83 @@ namespace GameSave.Views
                 panel.Children.Add(cloudConfigComboBox);
             }
 
+            // ========== 定时备份组 ==========
+            panel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 4)
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "定时备份",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
+
+            var scheduledBackupToggle = new ToggleSwitch
+            {
+                Header = "启用定时备份",
+                IsOn = game.ScheduledBackupEnabled,
+                OnContent = "已启用",
+                OffContent = "已关闭"
+            };
+            panel.Children.Add(scheduledBackupToggle);
+
+            var editScheduledBackupDesc = new TextBlock
+            {
+                Text = "有启动进程：游戏运行时自动开始，退出后停止\n无启动进程：在游戏列表中手动控制启停",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Visibility = game.ScheduledBackupEnabled
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            panel.Children.Add(editScheduledBackupDesc);
+
+            var editInitialVis = game.ScheduledBackupEnabled
+                ? Microsoft.UI.Xaml.Visibility.Visible
+                : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+            var editIntervalBox = new NumberBox
+            {
+                Header = "备份间隔（分钟）",
+                Value = game.ScheduledBackupIntervalMinutes,
+                Minimum = 1,
+                Maximum = 1440,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                Visibility = editInitialVis
+            };
+            panel.Children.Add(editIntervalBox);
+
+            var editMaxCountBox = new NumberBox
+            {
+                Header = "最大备份数量",
+                Value = game.ScheduledBackupMaxCount,
+                Minimum = 1,
+                Maximum = 100,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                Visibility = editInitialVis
+            };
+            panel.Children.Add(editMaxCountBox);
+
+            scheduledBackupToggle.Toggled += (s, args) =>
+            {
+                var vis = scheduledBackupToggle.IsOn
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+                editScheduledBackupDesc.Visibility = vis;
+                editIntervalBox.Visibility = vis;
+                editMaxCountBox.Visibility = vis;
+            };
+
+            scrollViewer.Content = panel;
+
             var dialog = new ContentDialog
             {
                 Title = $"编辑游戏 - {game.Name}",
@@ -841,7 +1045,7 @@ namespace GameSave.Views
                 SecondaryButtonText = "取消",
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = this.XamlRoot,
-                Content = panel
+                Content = scrollViewer
             };
 
             var result = await dialog.ShowWithThemeAsync();
@@ -861,6 +1065,11 @@ namespace GameSave.Views
                 {
                     game.CloudConfigId = null;
                 }
+
+                // 更新定时备份设置
+                game.ScheduledBackupEnabled = scheduledBackupToggle.IsOn;
+                game.ScheduledBackupIntervalMinutes = (int)editIntervalBox.Value;
+                game.ScheduledBackupMaxCount = (int)editMaxCountBox.Value;
 
                 var (success, message) = await ViewModel.UpdateGameAsync(game);
                 if (!success)
