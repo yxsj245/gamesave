@@ -77,16 +77,33 @@ namespace GameSave.Views
         /// </summary>
         private void GoToSettings_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
-            // 通过导航到设置页面实现
-            if (this.Frame?.Parent is NavigationView navView)
+            // 通过设置导航栏选中项来切换到设置页面
+            // 需要向上遍历视觉树找到 NavigationView，因为 Frame.Parent 是 Grid 而非直接的 NavigationView
+            var navView = FindParentNavigationView(this.Frame);
+            if (navView != null)
             {
-                // 选中导航栏的设置项
+                // 选中导航栏的设置项，这会触发 NavView_SelectionChanged 事件自动导航到设置页面
                 navView.SelectedItem = navView.SettingsItem;
             }
             else
             {
+                // 兜底：直接导航（但左侧导航栏选中状态不会更新）
                 this.Frame?.Navigate(typeof(SettingsPage));
             }
+        }
+
+        /// <summary>
+        /// 向上遍历视觉树查找 NavigationView 父级
+        /// </summary>
+        private static NavigationView? FindParentNavigationView(Microsoft.UI.Xaml.DependencyObject? element)
+        {
+            while (element != null)
+            {
+                if (element is NavigationView nav)
+                    return nav;
+                element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element);
+            }
+            return null;
         }
 
         /// <summary>
