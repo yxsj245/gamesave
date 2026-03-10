@@ -22,6 +22,8 @@ namespace GameSave;
 [JsonSerializable(typeof(List<Game>))]
 [JsonSerializable(typeof(List<CloudConfig>))]
 [JsonSerializable(typeof(List<SaveFile>))]
+[JsonSerializable(typeof(ExportManifest))]
+[JsonSerializable(typeof(List<ImportGamePreview>))]
 public partial class AppJsonContext : JsonSerializerContext
 {
 }

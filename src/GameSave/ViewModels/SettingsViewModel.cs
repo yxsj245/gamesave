@@ -307,4 +307,75 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     #endregion
+
+    #region 导入导出
+
+    /// <summary>
+    /// 导出选中的游戏及其存档到 zip 文件
+    /// </summary>
+    /// <param name="games">要导出的游戏列表</param>
+    /// <param name="outputPath">输出 zip 文件路径</param>
+    public async Task<(bool success, string message)> ExportGamesAsync(List<Game> games, string outputPath, IProgress<double>? progress = null)
+    {
+        try
+        {
+            var service = new ExportImportService(_configService);
+            // 在后台线程执行 I/O 密集操作，确保 UI 线程能及时响应进度回调
+            await Task.Run(async () => await service.ExportGamesAsync(games, outputPath, progress));
+            return (true, $"成功导出 {games.Count} 个游戏到:\n{outputPath}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"导出失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 获取导入预览信息
+    /// </summary>
+    public async Task<(bool success, List<ImportGamePreview>? previews, string message)> GetImportPreviewAsync(string zipPath)
+    {
+        try
+        {
+            var service = new ExportImportService(_configService);
+            var previews = await service.GetImportPreviewAsync(zipPath);
+
+            if (previews.Count == 0)
+                return (false, null, "导入文件中没有找到有效的游戏数据");
+
+            return (true, previews, $"发现 {previews.Count} 个游戏");
+        }
+        catch (Exception ex)
+        {
+            return (false, null, $"读取导入文件失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 执行导入
+    /// </summary>
+    public async Task<(bool success, string message)> ImportGamesAsync(string zipPath, IProgress<double>? progress = null)
+    {
+        try
+        {
+            var service = new ExportImportService(_configService);
+            // 在后台线程执行 I/O 密集操作，确保 UI 线程能及时响应进度回调
+            var result = await Task.Run(async () => await service.ImportGamesAsync(zipPath, progress));
+            return (true, $"导入完成: {result.imported} 个成功, {result.skipped} 个跳过\n\n{result.details}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"导入失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 获取所有游戏列表（供导出选择用）
+    /// </summary>
+    public List<Game> GetAllGames()
+    {
+        return _configService.GetAllGames();
+    }
+
+    #endregion
 }

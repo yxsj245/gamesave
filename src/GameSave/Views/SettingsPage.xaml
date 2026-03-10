@@ -10,7 +10,13 @@
     Loaded="Page_Loaded"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="24">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" Padding="24">
         <StackPanel Spacing="24">
             <TextBlock Text="设置" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
 
@@ -153,6 +159,34 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 数据管理 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8F1;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                            <TextBlock Text="数据管理" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="导入或导出游戏配置及存档数据，方便备份或跨设备迁移" FontSize="13" Foreground="Gray"/>
+                        
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="导出游戏" Click="ExportGames_Click">
+                                <Button.Resources>
+                                    <FontIcon x:Key="Icon" Glyph="&#xEDE1;"/>
+                                </Button.Resources>
+                            </Button>
+                            <Button Content="导入数据" Click="ImportGames_Click">
+                                <Button.Resources>
+                                    <FontIcon x:Key="Icon" Glyph="&#xE8B5;"/>
+                                </Button.Resources>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- 关于信息 -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         CornerRadius="8"
@@ -172,5 +206,25 @@
 
             </controls:AdaptiveWrapPanel>
         </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+
+        <!-- 导入导出进度条 -->
+        <Border x:Name="ProgressPanel" 
+                Grid.Row="1" 
+                Visibility="Collapsed"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="24,12">
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="ProgressStatusText" 
+                           Text="正在处理..." 
+                           FontSize="13"/>
+                <ProgressBar x:Name="ExportImportProgressBar" 
+                             Minimum="0" 
+                             Maximum="100" 
+                             Value="0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
 </Page>

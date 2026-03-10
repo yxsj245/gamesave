@@ -1,4 +1,5 @@
 using GameSave.Models;
+using GameSave.Services;
 
 namespace GameSave.Views
 {
@@ -218,5 +219,318 @@ namespace GameSave.Views
                 }
             }
         }
+
+        /// <summary>
+        /// 导出游戏 — 弹出批量选择对话框（支持全选）
+        /// </summary>
+        private async void ExportGames_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            var allGames = ViewModel.GetAllGames();
+            if (allGames.Count == 0)
+            {
+                var emptyDialog = new ContentDialog
+                {
+                    Title = "提示",
+                    Content = "当前没有任何游戏可以导出",
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await emptyDialog.ShowWithThemeAsync();
+                return;
+            }
+
+            // 构建选择列表
+            var formPanel = new StackPanel { Spacing = 8, MinWidth = 400 };
+
+            // 全选复选框
+            var selectAllCheckBox = new CheckBox
+            {
+                Content = "全选",
+                IsChecked = true,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            };
+            formPanel.Children.Add(selectAllCheckBox);
+
+            // 分隔线
+            var separator = new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            };
+            formPanel.Children.Add(separator);
+
+            // 游戏复选框列表
+            var gameCheckBoxes = new List<(CheckBox checkBox, Game game)>();
+            bool isUpdatingCheckBoxes = false;
+
+            foreach (var game in allGames)
+            {
+                var cb = new CheckBox
+                {
+                    Content = game.Name,
+                    IsChecked = true,
+                    Tag = game
+                };
+                gameCheckBoxes.Add((cb, game));
+                formPanel.Children.Add(cb);
+            }
+
+            // 全选联动逻辑
+            selectAllCheckBox.Checked += (s, _) =>
+            {
+                if (isUpdatingCheckBoxes) return;
+                isUpdatingCheckBoxes = true;
+                foreach (var (cb, _) in gameCheckBoxes)
+                    cb.IsChecked = true;
+                isUpdatingCheckBoxes = false;
+            };
+
+            selectAllCheckBox.Unchecked += (s, _) =>
+            {
+                if (isUpdatingCheckBoxes) return;
+                isUpdatingCheckBoxes = true;
+                foreach (var (cb, _) in gameCheckBoxes)
+                    cb.IsChecked = false;
+                isUpdatingCheckBoxes = false;
+            };
+
+            // 子项联动全选
+            foreach (var (cb, _) in gameCheckBoxes)
+            {
+                cb.Checked += (s, _) =>
+                {
+                    if (isUpdatingCheckBoxes) return;
+                    isUpdatingCheckBoxes = true;
+                    if (gameCheckBoxes.All(x => x.checkBox.IsChecked == true))
+                        selectAllCheckBox.IsChecked = true;
+                    else
+                        selectAllCheckBox.IsChecked = null; // 不确定状态
+                    isUpdatingCheckBoxes = false;
+                };
+                cb.Unchecked += (s, _) =>
+                {
+                    if (isUpdatingCheckBoxes) return;
+                    isUpdatingCheckBoxes = true;
+                    if (gameCheckBoxes.All(x => x.checkBox.IsChecked == false))
+                        selectAllCheckBox.IsChecked = false;
+                    else
+                        selectAllCheckBox.IsChecked = null; // 不确定状态
+                    isUpdatingCheckBoxes = false;
+                };
+            }
+
+            var scrollViewer = new ScrollViewer
+            {
+                Content = formPanel,
+                MaxHeight = 400
+            };
+
+            var selectDialog = new ContentDialog
+            {
+                Title = "选择要导出的游戏",
+                PrimaryButtonText = "导出",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot,
+                Content = scrollViewer
+            };
+
+            var selectResult = await selectDialog.ShowWithThemeAsync();
+            if (selectResult != ContentDialogResult.Primary)
+                return;
+
+            // 收集选中的游戏
+            var selectedGames = gameCheckBoxes
+                .Where(x => x.checkBox.IsChecked == true)
+                .Select(x => x.game)
+                .ToList();
+
+            if (selectedGames.Count == 0)
+            {
+                var noSelectDialog = new ContentDialog
+                {
+                    Title = "提示",
+                    Content = "请至少选择一个游戏",
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await noSelectDialog.ShowWithThemeAsync();
+                return;
+            }
+
+            // 弹出保存文件对话框
+            var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+            savePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            savePicker.FileTypeChoices.Add("ZIP 压缩包", new List<string> { ".zip" });
+            savePicker.SuggestedFileName = $"GameSave_Export_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(savePicker, hwnd);
+
+            var file = await savePicker.PickSaveFileAsync();
+            if (file == null) return;
+
+            // 显示进度条
+            ProgressStatusText.Text = $"正在导出 {selectedGames.Count} 个游戏...";
+            ExportImportProgressBar.Value = 0;
+            ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+
+            var progress = new Progress<double>(value =>
+            {
+                ExportImportProgressBar.Value = value;
+                ProgressStatusText.Text = $"正在导出 {selectedGames.Count} 个游戏... {value:F0}%";
+            });
+
+            // 执行导出（记录开始时间，确保进度条至少显示 500ms）
+            var exportStartTime = DateTime.Now;
+            var (success, message) = await ViewModel.ExportGamesAsync(selectedGames, file.Path, progress);
+
+            var elapsed = (DateTime.Now - exportStartTime).TotalMilliseconds;
+            if (elapsed < 500)
+                await Task.Delay((int)(500 - elapsed));
+
+            // 隐藏进度条
+            ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+            var resultDialog = new ContentDialog
+            {
+                Title = success ? "导出成功" : "导出失败",
+                Content = message,
+                CloseButtonText = "确定",
+                XamlRoot = this.XamlRoot
+            };
+            await resultDialog.ShowWithThemeAsync();
+        }
+
+        /// <summary>
+        /// 导入数据 — 选择 zip 文件并预览后导入
+        /// </summary>
+        private async void ImportGames_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            // 打开文件选择器
+            var openPicker = new Windows.Storage.Pickers.FileOpenPicker();
+            openPicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            openPicker.FileTypeFilter.Add(".zip");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(openPicker, hwnd);
+
+            var file = await openPicker.PickSingleFileAsync();
+            if (file == null) return;
+
+            // 获取预览信息
+            var (previewSuccess, previews, previewMessage) = await ViewModel.GetImportPreviewAsync(file.Path);
+            if (!previewSuccess || previews == null)
+            {
+                var errorDialog = new ContentDialog
+                {
+                    Title = "无法导入",
+                    Content = previewMessage,
+                    CloseButtonText = "确定",
+                    XamlRoot = this.XamlRoot
+                };
+                await errorDialog.ShowWithThemeAsync();
+                return;
+            }
+
+            // 构建预览内容
+            var previewPanel = new StackPanel { Spacing = 8, MinWidth = 400 };
+            previewPanel.Children.Add(new TextBlock
+            {
+                Text = $"发现 {previews.Count} 个游戏：",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            foreach (var preview in previews)
+            {
+                var itemPanel = new StackPanel { Spacing = 2, Margin = new Microsoft.UI.Xaml.Thickness(8, 4, 0, 4) };
+
+                var nameText = new TextBlock
+                {
+                    Text = preview.Name,
+                    FontSize = 14,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                };
+
+                var detailText = new TextBlock
+                {
+                    Text = $"存档数: {preview.SaveCount}　路径: {preview.SaveFolderPath}",
+                    FontSize = 12,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords
+                };
+
+                itemPanel.Children.Add(nameText);
+                itemPanel.Children.Add(detailText);
+
+                if (preview.AlreadyExists)
+                {
+                    var existsText = new TextBlock
+                    {
+                        Text = "⚠️ 本地已存在同名游戏，将跳过导入",
+                        FontSize = 12,
+                        Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Orange)
+                    };
+                    itemPanel.Children.Add(existsText);
+                }
+
+                previewPanel.Children.Add(itemPanel);
+            }
+
+            var previewScrollViewer = new ScrollViewer
+            {
+                Content = previewPanel,
+                MaxHeight = 400
+            };
+
+            var confirmDialog = new ContentDialog
+            {
+                Title = "确认导入",
+                PrimaryButtonText = "开始导入",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot,
+                Content = previewScrollViewer
+            };
+
+            var confirmResult = await confirmDialog.ShowWithThemeAsync();
+            if (confirmResult != ContentDialogResult.Primary)
+                return;
+
+            // 显示进度条
+            ProgressStatusText.Text = "正在导入数据...";
+            ExportImportProgressBar.Value = 0;
+            ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+
+            var importProgress = new Progress<double>(value =>
+            {
+                ExportImportProgressBar.Value = value;
+                ProgressStatusText.Text = $"正在导入数据... {value:F0}%";
+            });
+
+            // 执行导入（记录开始时间，确保进度条至少显示 500ms）
+            var importStartTime = DateTime.Now;
+            var (importSuccess, importMessage) = await ViewModel.ImportGamesAsync(file.Path, importProgress);
+
+            var importElapsed = (DateTime.Now - importStartTime).TotalMilliseconds;
+            if (importElapsed < 500)
+                await Task.Delay((int)(500 - importElapsed));
+
+            // 隐藏进度条
+            ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+            var resultDialog = new ContentDialog
+            {
+                Title = importSuccess ? "导入完成" : "导入失败",
+                Content = importMessage,
+                CloseButtonText = "确定",
+                XamlRoot = this.XamlRoot
+            };
+            await resultDialog.ShowWithThemeAsync();
+        }
     }
 }
+
