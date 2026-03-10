@@ -744,6 +744,46 @@ namespace GameSave.Views
             scrollViewer.Content = mainPanel;
             importDialog.Content = scrollViewer;
 
+            // 使用 Closing 事件拦截验证：点击「导入所选」时检查是否有未补全的必填信息
+            importDialog.Closing += (s, args) =>
+            {
+                // 仅拦截点击主按钮（导入所选）时的关闭
+                if (args.Result != ContentDialogResult.Primary)
+                    return;
+
+                // 查找勾选但未填写存档目录的游戏
+                var incomplete = gameExpanders
+                    .Where(item => item.game.IsSelected && string.IsNullOrWhiteSpace(item.savePathBox.Text))
+                    .ToList();
+
+                if (incomplete.Count > 0)
+                {
+                    // 阻止弹窗关闭
+                    args.Cancel = true;
+
+                    // 先折叠所有 Expander，再展开第一个未补全的
+                    foreach (var item in gameExpanders)
+                    {
+                        item.expander.IsExpanded = false;
+                    }
+
+                    var first = incomplete[0];
+                    first.expander.IsExpanded = true;
+
+                    // 高亮存档目录输入框边框为红色提醒
+                    foreach (var item in incomplete)
+                    {
+                        item.expander.IsExpanded = true;
+                        item.savePathBox.Header = "游戏存档目录 * （请补全此项）";
+                        item.savePathBox.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed);
+                        item.savePathBox.BorderThickness = new Microsoft.UI.Xaml.Thickness(2);
+                    }
+
+                    // 聚焦到第一个未补全的存档目录输入框
+                    first.savePathBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+                }
+            };
+
             var result = await importDialog.ShowWithThemeAsync();
 
             if (result == ContentDialogResult.Primary)

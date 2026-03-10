@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using GameSave.Helpers;
 using GameSave.Models;
 using GameSave.Services;
 
@@ -10,6 +11,11 @@ namespace GameSave.ViewModels;
 public partial class SettingsViewModel : BaseViewModel
 {
     private readonly ConfigService _configService;
+
+    /// <summary>
+    /// 应用版本号（从程序集信息中读取，构建时由 MSBuild 注入）
+    /// </summary>
+    public string AppVersion { get; } = AppVersionHelper.GetVersion();
 
     public SettingsViewModel()
     {

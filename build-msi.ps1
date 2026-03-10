@@ -78,7 +78,8 @@ if (-not $SkipPublish) {
         -p:RuntimeIdentifier=$RuntimeId `
         -p:SelfContained=true `
         -p:PublishReadyToRun=true `
-        -p:PublishTrimmed=true
+        -p:PublishTrimmed=true `
+        -p:AppVersion=$Version
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "错误：应用发布失败！" -ForegroundColor Red

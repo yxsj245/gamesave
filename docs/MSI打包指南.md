@@ -88,7 +88,7 @@ installer-output/GameSave-{Platform}-Setup.msi
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `-Platform` | string | `x64` | 目标平台，支持 `x64`、`x86`、`ARM64` |
-| `-Version` | string | `1.0.0` | 安装包版本号，格式 `Major.Minor.Build` |
+| `-Version` | string | `1.0.0` | 安装包及软件内显示的版本号，格式 `Major.Minor.Build`。会同时写入 MSI 安装包和程序集信息，软件设置页面的"关于"区域会自动显示此版本号 |
 | `-SkipPublish` | switch | 否 | 跳过 `dotnet publish` 步骤 |
 
 ---

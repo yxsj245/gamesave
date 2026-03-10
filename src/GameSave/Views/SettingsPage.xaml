@@ -198,9 +198,41 @@
                             <FontIcon Glyph="&#xE946;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
                             <TextBlock Text="关于" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <TextBlock Text="GameSave Manager" FontSize="14"/>
+                        <TextBlock Text="GameSave Manager" FontSize="14" FontWeight="SemiBold"/>
                         <TextBlock Text="一款简洁的游戏存档备份与恢复工具" FontSize="13" Foreground="Gray"/>
-                        <TextBlock Text="版本: 1.0.0" FontSize="12" Foreground="Gray"/>
+                        <TextBlock FontSize="12" Foreground="Gray">
+                            <Run Text="版本: "/>
+                            <Run Text="{x:Bind ViewModel.AppVersion}"/>
+                        </TextBlock>
+
+                        <MenuFlyoutSeparator Margin="0,4,0,4"/>
+
+                        <!-- 项目作者 -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE77B;" FontSize="14" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="项目作者：" FontSize="13" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="又菜有爱玩的小朱" FontSize="13" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- 开源地址 -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE71B;" FontSize="14" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="开源地址：" FontSize="13" Foreground="Gray" VerticalAlignment="Center"/>
+                            <HyperlinkButton Content="GitHub" 
+                                             NavigateUri="https://github.com/yxsj245/gamesave" 
+                                             Padding="0" 
+                                             VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- 赞助链接 -->
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xEB51;" FontSize="14" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="赞助支持：" FontSize="13" Foreground="Gray" VerticalAlignment="Center"/>
+                            <HyperlinkButton Content="爱发电" 
+                                             NavigateUri="https://afdian.com/a/xiaozhuhouses" 
+                                             Padding="0" 
+                                             VerticalAlignment="Center"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
