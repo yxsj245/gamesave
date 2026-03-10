@@ -119,6 +119,7 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemContainerTransitions>
                 <TransitionCollection>
+                    <AddDeleteThemeTransition/>
                     <EntranceThemeTransition IsStaggeringEnabled="True" />
                 </TransitionCollection>
             </ListView.ItemContainerTransitions>
@@ -424,6 +425,7 @@
                               SelectionChanged="SavesListView_SelectionChanged">
                         <ListView.ItemContainerTransitions>
                             <TransitionCollection>
+                                <AddDeleteThemeTransition/>
                                 <EntranceThemeTransition IsStaggeringEnabled="True"/>
                             </TransitionCollection>
                         </ListView.ItemContainerTransitions>

@@ -586,10 +586,30 @@ namespace GameSave.Views
         {
             if (sender is FrameworkElement fe && fe.DataContext is SaveFile save)
             {
+                // 构建对话框内容：提示文字 + 云端删除选项
+                var contentPanel = new StackPanel { Spacing = 12 };
+                contentPanel.Children.Add(new TextBlock
+                {
+                    Text = $"确定要删除存档「{save.Name}」吗？此操作不可撤回。",
+                    TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                });
+
+                // 仅当游戏关联了云端配置时，显示删除云端存档的选项
+                CheckBox? deleteCloudCheckBox = null;
+                if (ViewModel.SelectedGame != null && !string.IsNullOrEmpty(ViewModel.SelectedGame.CloudConfigId))
+                {
+                    deleteCloudCheckBox = new CheckBox
+                    {
+                        Content = "同时删除云端存档",
+                        IsChecked = false
+                    };
+                    contentPanel.Children.Add(deleteCloudCheckBox);
+                }
+
                 var dialog = new ContentDialog
                 {
                     Title = "确认删除",
-                    Content = $"确定要删除存档「{save.Name}」吗？此操作不可撤回。",
+                    Content = contentPanel,
                     PrimaryButtonText = "删除",
                     SecondaryButtonText = "取消",
                     DefaultButton = ContentDialogButton.Secondary,
@@ -599,7 +619,8 @@ namespace GameSave.Views
                 var result = await dialog.ShowWithThemeAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    var (success, message) = await ViewModel.DeleteSaveAsync(save);
+                    bool deleteCloud = deleteCloudCheckBox?.IsChecked == true;
+                    var (success, message) = await ViewModel.DeleteSaveAsync(save, deleteCloud);
                     if (!success)
                     {
                         await ShowMessageAsync("删除失败", message);
@@ -657,10 +678,30 @@ namespace GameSave.Views
                 return;
             }
 
+            // 构建对话框内容：提示文字 + 云端删除选项
+            var contentPanel = new StackPanel { Spacing = 12 };
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = confirmMsg,
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+
+            // 仅当游戏关联了云端配置时，显示删除云端存档的选项
+            CheckBox? deleteCloudCheckBox = null;
+            if (ViewModel.SelectedGame != null && !string.IsNullOrEmpty(ViewModel.SelectedGame.CloudConfigId))
+            {
+                deleteCloudCheckBox = new CheckBox
+                {
+                    Content = "同时删除云端存档",
+                    IsChecked = false
+                };
+                contentPanel.Children.Add(deleteCloudCheckBox);
+            }
+
             var dialog = new ContentDialog
             {
                 Title = "确认批量删除",
-                Content = confirmMsg,
+                Content = contentPanel,
                 PrimaryButtonText = "删除",
                 SecondaryButtonText = "取消",
                 DefaultButton = ContentDialogButton.Secondary,
@@ -670,7 +711,8 @@ namespace GameSave.Views
             var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var (success, message) = await ViewModel.BatchDeleteSavesAsync(deletable);
+                bool deleteCloud = deleteCloudCheckBox?.IsChecked == true;
+                var (success, message) = await ViewModel.BatchDeleteSavesAsync(deletable, deleteCloud);
                 if (!success)
                 {
                     await ShowMessageAsync("批量删除", message);

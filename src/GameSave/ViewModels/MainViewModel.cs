@@ -669,7 +669,9 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 删除指定存档
     /// </summary>
-    public async Task<(bool success, string message)> DeleteSaveAsync(SaveFile saveFile)
+    /// <param name="saveFile">要删除的存档</param>
+    /// <param name="deleteCloudSave">是否同时删除云端对应的存档</param>
+    public async Task<(bool success, string message)> DeleteSaveAsync(SaveFile saveFile, bool deleteCloudSave = false)
     {
         if (!saveFile.CanDelete)
             return (false, "退出存档不允许删除");
@@ -678,9 +680,18 @@ public partial class MainViewModel : BaseViewModel
 
         try
         {
+            // 若需要同时删除云端存档
+            if (deleteCloudSave && SelectedGame != null && !string.IsNullOrEmpty(SelectedGame.CloudConfigId))
+            {
+                await DeleteCloudSaveForLocalAsync(SelectedGame, saveFile);
+            }
+
             await _localStorageService.DeleteSaveAsync(saveFile);
             CurrentSaves.Remove(saveFile);
-            StatusMessage = $"存档 \"{saveFile.Name}\" 已删除";
+
+            StatusMessage = deleteCloudSave
+                ? $"存档 \"{saveFile.Name}\" 及其云端存档已删除"
+                : $"存档 \"{saveFile.Name}\" 已删除";
             return (true, StatusMessage);
         }
         catch (Exception ex)
@@ -697,7 +708,9 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 批量删除多个存档
     /// </summary>
-    public async Task<(bool success, string message)> BatchDeleteSavesAsync(IList<SaveFile> saveFiles)
+    /// <param name="saveFiles">要删除的存档列表</param>
+    /// <param name="deleteCloudSave">是否同时删除云端对应的存档</param>
+    public async Task<(bool success, string message)> BatchDeleteSavesAsync(IList<SaveFile> saveFiles, bool deleteCloudSave = false)
     {
         if (saveFiles == null || saveFiles.Count == 0)
             return (false, "请选择要删除的存档");
@@ -718,6 +731,12 @@ public partial class MainViewModel : BaseViewModel
             {
                 try
                 {
+                    // 若需要同时删除云端存档
+                    if (deleteCloudSave && SelectedGame != null && !string.IsNullOrEmpty(SelectedGame.CloudConfigId))
+                    {
+                        await DeleteCloudSaveForLocalAsync(SelectedGame, save);
+                    }
+
                     await _localStorageService.DeleteSaveAsync(save);
                     CurrentSaves.Remove(save);
                     successCount++;
@@ -728,9 +747,10 @@ public partial class MainViewModel : BaseViewModel
                 }
             }
 
+            var cloudHint = deleteCloudSave ? "（含云端）" : "";
             StatusMessage = failCount > 0
-                ? $"批量删除完成：成功 {successCount} 个，失败 {failCount} 个"
-                : $"已成功删除 {successCount} 个存档";
+                ? $"批量删除完成{cloudHint}：成功 {successCount} 个，失败 {failCount} 个"
+                : $"已成功删除 {successCount} 个存档{cloudHint}";
 
             return (failCount == 0, StatusMessage);
         }
@@ -742,6 +762,43 @@ public partial class MainViewModel : BaseViewModel
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 根据本地存档查找并删除对应的云端存档
+    /// 通过文件名匹配：本地存档的 tar 文件名 == 云端存档的 OSS key 后缀
+    /// </summary>
+    /// <param name="game">游戏信息</param>
+    /// <param name="localSave">本地存档</param>
+    private async Task DeleteCloudSaveForLocalAsync(Game game, SaveFile localSave)
+    {
+        try
+        {
+            var cloudConfig = _configService.GetCloudConfigById(game.CloudConfigId!);
+            if (cloudConfig == null) return;
+
+            var cloudService = new CloudStorageService(cloudConfig, _configService);
+
+            // 本地存档的 tar 文件名即为云端 OSS key 的文件名部分
+            var tarFileName = System.IO.Path.GetFileName(localSave.Path);
+            var cloudKey = $"{game.Id}/{tarFileName}";
+
+            // 构造一个代表云端存档的 SaveFile，用于调用 CloudStorageService.DeleteSaveAsync
+            var cloudSaveFile = new SaveFile
+            {
+                GameId = game.Id,
+                Path = cloudKey,
+                StorageType = StorageType.Cloud
+            };
+
+            await cloudService.DeleteSaveAsync(cloudSaveFile);
+            System.Diagnostics.Debug.WriteLine($"[删除存档] 已删除云端对应存档: {cloudKey}");
+        }
+        catch (Exception ex)
+        {
+            // 云端删除失败不阻塞本地删除
+            System.Diagnostics.Debug.WriteLine($"[删除存档] 云端删除失败: {ex.Message}");
         }
     }
 
