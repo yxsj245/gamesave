@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using GameSave.Helpers;
 
 namespace GameSave.Models;
 
@@ -16,8 +17,12 @@ public class Game : INotifyPropertyChanged
     /// <summary>游戏名称</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>游戏存档目录路径</summary>
+    /// <summary>游戏存档目录路径（可能包含环境变量，如 %APPDATA%\Game）</summary>
     public string SaveFolderPath { get; set; } = string.Empty;
+
+    /// <summary>展开环境变量后的实际存档目录路径（用于文件系统操作）</summary>
+    [JsonIgnore]
+    public string ResolvedSaveFolderPath => PathEnvironmentHelper.ExpandEnvVariables(SaveFolderPath);
 
     /// <summary>游戏图标路径（可选）</summary>
     public string? IconPath { get; set; }

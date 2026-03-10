@@ -93,8 +93,8 @@ public class GameService
         _configService.GetGameWorkDirectory(game.Id);
 
         // 检测存档目录是否有文件，有则自动初始备份
-        if (Directory.Exists(game.SaveFolderPath) &&
-            Directory.EnumerateFiles(game.SaveFolderPath, "*", SearchOption.AllDirectories).Any())
+        if (Directory.Exists(game.ResolvedSaveFolderPath) &&
+            Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
         {
             await _localStorageService.CreateExitSaveAsync(game);
         }
@@ -184,7 +184,7 @@ public class GameService
             else
             {
                 // 清空存档目录
-                if (Directory.Exists(game.SaveFolderPath))
+                if (Directory.Exists(game.ResolvedSaveFolderPath))
                 {
                     StatusChanged?.Invoke(this, new GameStatusInfo
                     {
@@ -194,7 +194,7 @@ public class GameService
                         Message = $"正在清空 {game.Name} 的存档目录...",
                         Progress = 50
                     });
-                    ClearDirectory(game.SaveFolderPath);
+                    ClearDirectory(game.ResolvedSaveFolderPath);
                 }
 
                 // 解压存档
@@ -206,7 +206,7 @@ public class GameService
                     Message = $"正在解压存档到 {game.Name} 的存档目录...",
                     Progress = 60
                 });
-                await TarHelper.ExtractTarAsync(latestExitSave.Path, game.SaveFolderPath);
+                await TarHelper.ExtractTarAsync(latestExitSave.Path, game.ResolvedSaveFolderPath);
 
                 // 更新进度：解压完成
                 StatusChanged?.Invoke(this, new GameStatusInfo
@@ -320,8 +320,8 @@ public class GameService
             SaveFile? save = null;
             try
             {
-                if (Directory.Exists(game.SaveFolderPath) &&
-                    Directory.EnumerateFiles(game.SaveFolderPath, "*", SearchOption.AllDirectories).Any())
+                if (Directory.Exists(game.ResolvedSaveFolderPath) &&
+                    Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
                 {
                     var progress = new Progress<double>(p =>
                     {

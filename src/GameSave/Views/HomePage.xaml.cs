@@ -1,3 +1,4 @@
+using GameSave.Helpers;
 using GameSave.Models;
 using GameSave.Services;
 
@@ -248,7 +249,8 @@ namespace GameSave.Views
                 var folder = await picker.PickSingleFolderAsync();
                 if (folder != null)
                 {
-                    savePathBox.Text = folder.Path;
+                    // 自动将绝对路径替换为环境变量形式，方便多设备导入导出
+                    savePathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
                 }
             };
             Grid.SetColumn(browseSaveBtn, 1);
@@ -748,7 +750,7 @@ namespace GameSave.Views
             var savePathBox = new TextBox
             {
                 Header = "游戏存档目录（不可更改）",
-                Text = game.SaveFolderPath,
+                Text = game.ResolvedSaveFolderPath,
                 IsReadOnly = true,
                 IsEnabled = false
             };

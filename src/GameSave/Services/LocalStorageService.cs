@@ -62,11 +62,11 @@ public class LocalStorageService : IStorageService
     /// </summary>
     public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null)
     {
-        if (!Directory.Exists(game.SaveFolderPath))
-            throw new DirectoryNotFoundException($"游戏存档目录不存在: {game.SaveFolderPath}");
+        if (!Directory.Exists(game.ResolvedSaveFolderPath))
+            throw new DirectoryNotFoundException($"游戏存档目录不存在: {game.ResolvedSaveFolderPath}");
 
         // 检查存档目录是否有文件
-        if (!DirectoryHasFiles(game.SaveFolderPath))
+        if (!DirectoryHasFiles(game.ResolvedSaveFolderPath))
             throw new InvalidOperationException("存档目录下没有可备份的文件");
 
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
@@ -75,7 +75,7 @@ public class LocalStorageService : IStorageService
         var tarFilePath = Path.Combine(gameWorkDir, tarFileName);
 
         // 打包存档目录为 .tar
-        await TarHelper.CreateTarAsync(game.SaveFolderPath, tarFilePath, progress);
+        await TarHelper.CreateTarAsync(game.ResolvedSaveFolderPath, tarFilePath, progress);
 
         var fileInfo = new FileInfo(tarFilePath);
         var saveFile = new SaveFile
@@ -110,13 +110,13 @@ public class LocalStorageService : IStorageService
             throw new InvalidOperationException($"找不到对应的游戏信息 (ID: {saveFile.GameId})");
 
         // 清空游戏存档目录
-        if (Directory.Exists(game.SaveFolderPath))
+        if (Directory.Exists(game.ResolvedSaveFolderPath))
         {
-            ClearDirectory(game.SaveFolderPath);
+            ClearDirectory(game.ResolvedSaveFolderPath);
         }
 
         // 解压 .tar 到游戏存档目录
-        await TarHelper.ExtractTarAsync(saveFile.Path, game.SaveFolderPath, progress);
+        await TarHelper.ExtractTarAsync(saveFile.Path, game.ResolvedSaveFolderPath, progress);
     }
 
     /// <summary>

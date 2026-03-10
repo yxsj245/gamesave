@@ -270,7 +270,7 @@
                         
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="{Binding SelectedGame.Name}" FontSize="28" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="{Binding SelectedGame.SaveFolderPath}" FontSize="13" Foreground="Gray" TextWrapping="WrapWholeWords" MaxLines="2"/>
+                            <TextBlock Text="{Binding SelectedGame.ResolvedSaveFolderPath}" FontSize="13" Foreground="Gray" TextWrapping="WrapWholeWords" MaxLines="2"/>
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Spacing="8">
