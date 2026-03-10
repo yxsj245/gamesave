@@ -728,6 +728,148 @@ namespace GameSave.Views
             }
         }
 
+        private async void ContextEdit_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            var game = GetGameFromContext(sender);
+            if (game == null) return;
+
+            var panel = new StackPanel { Spacing = 12, MinWidth = 400 };
+
+            // 游戏名称
+            var nameBox = new TextBox
+            {
+                Header = "游戏名称 *",
+                PlaceholderText = "例如: ELDEN RING",
+                Text = game.Name
+            };
+            panel.Children.Add(nameBox);
+
+            // 存档目录（只读，不允许更改）
+            var savePathBox = new TextBox
+            {
+                Header = "游戏存档目录（不可更改）",
+                Text = game.SaveFolderPath,
+                IsReadOnly = true,
+                IsEnabled = false
+            };
+            panel.Children.Add(savePathBox);
+
+            // 启动进程（可选）
+            var processPathPanel = new Grid();
+            processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var processPathBox = new TextBox
+            {
+                Header = "游戏启动进程（可选）",
+                PlaceholderText = "选择游戏可执行文件",
+                IsReadOnly = true,
+                Text = game.ProcessPath ?? string.Empty
+            };
+            Grid.SetColumn(processPathBox, 0);
+
+            var browseProcessBtn = new Button
+            {
+                Content = "浏览",
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
+            };
+            browseProcessBtn.Click += async (s, args) =>
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add("*");
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                var file = await picker.PickSingleFileAsync();
+                if (file != null)
+                {
+                    processPathBox.Text = file.Path;
+                }
+            };
+            Grid.SetColumn(browseProcessBtn, 1);
+
+            processPathPanel.Children.Add(processPathBox);
+            processPathPanel.Children.Add(browseProcessBtn);
+            panel.Children.Add(processPathPanel);
+
+            // 启动参数（可选）
+            var argsBox = new TextBox
+            {
+                Header = "启动附加参数（可选）",
+                PlaceholderText = "例如: -windowed -dx12",
+                Text = game.ProcessArgs ?? string.Empty
+            };
+            panel.Children.Add(argsBox);
+
+            // 云端服务商（可选）
+            ComboBox? cloudConfigComboBox = null;
+            if (ViewModel.CloudConfigs.Count > 0)
+            {
+                cloudConfigComboBox = new ComboBox
+                {
+                    Header = "云端服务商（可选）",
+                    PlaceholderText = "不使用云端同步",
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                    DisplayMemberPath = "DisplayName"
+                };
+                cloudConfigComboBox.ItemsSource = ViewModel.CloudConfigs;
+
+                // 预选当前游戏关联的云端配置
+                if (!string.IsNullOrEmpty(game.CloudConfigId))
+                {
+                    foreach (var config in ViewModel.CloudConfigs)
+                    {
+                        if (config.Id == game.CloudConfigId)
+                        {
+                            cloudConfigComboBox.SelectedItem = config;
+                            break;
+                        }
+                    }
+                }
+
+                panel.Children.Add(cloudConfigComboBox);
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = $"编辑游戏 - {game.Name}",
+                PrimaryButtonText = "保存",
+                SecondaryButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot,
+                Content = panel
+            };
+
+            var result = await dialog.ShowWithThemeAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                // 更新游戏属性（存档目录不变）
+                game.Name = nameBox.Text.Trim();
+                game.ProcessPath = string.IsNullOrWhiteSpace(processPathBox.Text) ? null : processPathBox.Text.Trim();
+                game.ProcessArgs = string.IsNullOrWhiteSpace(argsBox.Text) ? null : argsBox.Text.Trim();
+
+                if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
+                {
+                    game.CloudConfigId = selectedConfig.Id;
+                }
+                else
+                {
+                    game.CloudConfigId = null;
+                }
+
+                var (success, message) = await ViewModel.UpdateGameAsync(game);
+                if (!success)
+                {
+                    await ShowMessageAsync("编辑失败", message);
+                }
+            }
+        }
+
         private async void ContextDelete_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
             var game = GetGameFromContext(sender);

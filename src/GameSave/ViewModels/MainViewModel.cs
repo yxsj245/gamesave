@@ -309,6 +309,58 @@ public partial class MainViewModel : BaseViewModel
 
     #endregion
 
+    #region 编辑游戏
+
+    /// <summary>
+    /// 更新游戏属性（不允许修改存档目录）
+    /// </summary>
+    /// <param name="game">要更新的游戏对象（已修改属性）</param>
+    public async Task<(bool success, string message)> UpdateGameAsync(Game game)
+    {
+        if (string.IsNullOrWhiteSpace(game.Name))
+        {
+            return (false, "游戏名称不能为空");
+        }
+
+        IsBusy = true;
+        StatusMessage = "正在保存游戏信息...";
+
+        try
+        {
+            await _configService.UpdateGameAsync(game);
+
+            // 同步更新内存中的游戏列表
+            var index = -1;
+            for (int i = 0; i < Games.Count; i++)
+            {
+                if (Games[i].Id == game.Id)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index >= 0)
+            {
+                Games[index] = game;
+            }
+
+            StatusMessage = $"游戏「{game.Name}」信息已更新";
+            return (true, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"更新游戏失败: {ex.Message}";
+            return (false, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    #endregion
+
     #region 启动游戏
 
     /// <summary>

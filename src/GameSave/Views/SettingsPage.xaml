@@ -91,6 +91,11 @@
                     <ListView x:Name="CloudConfigListView"
                               ItemsSource="{x:Bind ViewModel.CloudConfigs, Mode=OneWay}"
                               SelectionMode="None">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection>
+                                <EntranceThemeTransition IsStaggeringEnabled="True"/>
+                            </TransitionCollection>
+                        </ListView.ItemContainerTransitions>
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Grid Padding="8,12" Margin="0,2">

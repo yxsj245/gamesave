@@ -124,6 +124,10 @@ namespace GameSave.Views
         private void BuildSaveGroupsUI()
         {
             var groupPanels = new StackPanel { Spacing = 16 };
+            groupPanels.ChildrenTransitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection
+            {
+                new Microsoft.UI.Xaml.Media.Animation.EntranceThemeTransition { IsStaggeringEnabled = true }
+            };
 
             foreach (var group in ViewModel.SaveGroups)
             {
@@ -244,6 +248,10 @@ namespace GameSave.Views
                 expander.Header = headerPanel;
 
                 var savesContent = new StackPanel { Spacing = 12, Padding = new Microsoft.UI.Xaml.Thickness(0, 12, 0, 0) };
+                savesContent.ChildrenTransitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection
+                {
+                    new Microsoft.UI.Xaml.Media.Animation.EntranceThemeTransition { IsStaggeringEnabled = true }
+                };
 
                 // 存档项列表
                 foreach (var save in group.Saves)
