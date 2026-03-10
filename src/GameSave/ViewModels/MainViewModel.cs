@@ -169,9 +169,10 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public async Task InitializeAsync()
     {
-        await _configService.InitializeAsync();
+        // 配置服务已在 App.OnLaunched 中初始化，此处无需再次调用
         LoadGamesFromConfig();
         LoadCloudConfigs();
+        await Task.CompletedTask;
     }
 
     private void LoadGamesFromConfig()

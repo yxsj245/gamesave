@@ -17,6 +17,54 @@ public partial class SettingsViewModel : BaseViewModel
         _configService = App.ConfigService;
     }
 
+    #region 外观设置（主题）
+
+    /// <summary>
+    /// 当前选中的主题索引：0=跟随系统，1=浅色，2=深色
+    /// </summary>
+    private int _selectedThemeIndex;
+    public int SelectedThemeIndex
+    {
+        get => _selectedThemeIndex;
+        set
+        {
+            if (SetProperty(ref _selectedThemeIndex, value))
+            {
+                _ = ChangeThemeAsync(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 主题索引到字符串的映射
+    /// </summary>
+    private static readonly string[] ThemeModes = { "System", "Light", "Dark" };
+
+    /// <summary>
+    /// 切换主题并保存
+    /// </summary>
+    private async Task ChangeThemeAsync(int themeIndex)
+    {
+        if (themeIndex < 0 || themeIndex >= ThemeModes.Length) return;
+        var themeMode = ThemeModes[themeIndex];
+        await App.SetThemeAsync(themeMode);
+    }
+
+    /// <summary>
+    /// 将主题字符串转换为索引
+    /// </summary>
+    private static int ThemeModeToIndex(string themeMode)
+    {
+        return themeMode switch
+        {
+            "Light" => 1,
+            "Dark" => 2,
+            _ => 0  // "System" 或其他
+        };
+    }
+
+    #endregion
+
     #region 工作目录
 
     private string _workDirectory = string.Empty;
@@ -27,12 +75,16 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// 初始化加载当前工作目录和云配置
+    /// 初始化加载当前工作目录、云配置和主题设置
     /// </summary>
     public void LoadSettings()
     {
         WorkDirectory = _configService.WorkDirectory;
         LoadCloudConfigs();
+
+        // 加载当前主题设置（直接设置字段避免触发 setter 中的保存操作）
+        _selectedThemeIndex = ThemeModeToIndex(_configService.ThemeMode);
+        OnPropertyChanged(nameof(SelectedThemeIndex));
     }
 
     /// <summary>

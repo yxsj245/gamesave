@@ -12,6 +12,30 @@ namespace GameSave.Views
         {
             this.InitializeComponent();
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+
+            // 监听游戏崩溃检测事件，弹窗提示用户
+            App.GameService.GameCrashDetected += async (_, gameName) =>
+            {
+                var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+                if (dispatcherQueue != null)
+                {
+                    dispatcherQueue.TryEnqueue(async () =>
+                    {
+                        try
+                        {
+                            await ShowMessageAsync("⚠️ 异常退出",
+                                $"检测到「{gameName}」程序崩溃或未成功启动，本次退出存档将不再备份。\n\n" +
+                                "可能的原因：\n" +
+                                "• Steam 等启动器劫持了进程，但未成功启动游戏\n" +
+                                "• 游戏进程异常终止");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[HomePage] 崩溃提示弹窗异常: {ex.Message}");
+                        }
+                    });
+                }
+            };
         }
 
         public MainViewModel ViewModel { get; } = new MainViewModel();
@@ -299,7 +323,7 @@ namespace GameSave.Views
 
             dialog.Content = panel;
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
 
             if (result == ContentDialogResult.Primary)
             {
@@ -382,7 +406,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 ViewModel.ManualSaveName = nameBox.Text;
@@ -427,7 +451,7 @@ namespace GameSave.Views
                         XamlRoot = this.XamlRoot
                     };
 
-                    var confirmResult = await confirmDialog.ShowAsync();
+                    var confirmResult = await confirmDialog.ShowWithThemeAsync();
                     if (confirmResult == ContentDialogResult.Primary)
                     {
                         var (success, message) = await ViewModel.RestoreSaveAsync(save, force: true);
@@ -458,7 +482,7 @@ namespace GameSave.Views
                     XamlRoot = this.XamlRoot
                 };
 
-                var result = await dialog.ShowAsync();
+                var result = await dialog.ShowWithThemeAsync();
                 if (result == ContentDialogResult.Primary)
                 {
                     var (success, message) = await ViewModel.DeleteSaveAsync(save);
@@ -529,7 +553,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 var (success, message) = await ViewModel.BatchDeleteSavesAsync(deletable);
@@ -601,7 +625,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 bool deleteCloud = deleteCloudCheckBox?.IsChecked == true;
@@ -630,7 +654,7 @@ namespace GameSave.Views
                 CloseButtonText = "确定",
                 XamlRoot = this.XamlRoot
             };
-            await dialog.ShowAsync();
+            await dialog.ShowWithThemeAsync();
         }
 
         #endregion
@@ -692,7 +716,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 ViewModel.ManualSaveName = nameBox.Text;
@@ -739,7 +763,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowAsync();
+            var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 ViewModel.SelectedGame = game;

@@ -16,6 +16,12 @@ public class AppConfig
 
     /// <summary>云存储配置列表</summary>
     public List<CloudConfig> CloudConfigs { get; set; } = new();
+
+    /// <summary>
+    /// 主题模式：System（跟随系统）、Light（浅色）、Dark（深色）
+    /// 默认跟随系统
+    /// </summary>
+    public string ThemeMode { get; set; } = "System";
 }
 
 /// <summary>
@@ -35,6 +41,18 @@ public class ConfigService
 
     /// <summary>配置文件路径</summary>
     public string ConfigFilePath => _configFilePath;
+
+    /// <summary>当前主题模式</summary>
+    public string ThemeMode => _config.ThemeMode;
+
+    /// <summary>
+    /// 设置主题模式并保存配置
+    /// </summary>
+    public async Task SetThemeModeAsync(string themeMode)
+    {
+        _config.ThemeMode = themeMode;
+        await SaveConfigAsync();
+    }
 
     /// <summary>
     /// 获取默认工作目录路径

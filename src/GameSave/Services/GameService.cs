@@ -56,6 +56,9 @@ public class GameService
     /// <summary>游戏运行状态变更事件</summary>
     public event EventHandler<GameStatusInfo>? StatusChanged;
 
+    /// <summary>检测到游戏崩溃或未成功启动时触发的事件（参数为游戏名称）</summary>
+    public event EventHandler<string>? GameCrashDetected;
+
     /// <summary>当前是否有游戏正在运行</summary>
     public bool IsGameRunning { get; private set; }
 
@@ -249,7 +252,7 @@ public class GameService
         // 3. 后台监测进程退出
         _ = Task.Run(async () =>
         {
-            await _processMonitorService.WaitForExitAsync(process);
+            var exitType = await _processMonitorService.WaitForExitAsync(process);
 
             IsGameRunning = false;
             RunningGameId = null;
@@ -270,6 +273,40 @@ public class GameService
                 game.IsRunning = false;
             }
 
+            // 如果监测被取消，直接恢复空闲状态
+            if (exitType == ProcessExitType.Cancelled)
+            {
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Idle,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = "监测已取消"
+                });
+                GameExited?.Invoke(this, game.Id);
+                return;
+            }
+
+            // 如果检测到崩溃或未成功启动，通知 UI 并跳过备份
+            if (exitType == ProcessExitType.CrashOrNotLaunched)
+            {
+                System.Diagnostics.Debug.WriteLine($"[进程监测] 游戏 {game.Name} 疑似崩溃或未成功启动，跳过退出备份");
+
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Idle,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = $"检测到 {game.Name} 异常退出，本次不备份"
+                });
+
+                // 触发崩溃检测事件，通知 UI 层弹窗
+                GameCrashDetected?.Invoke(this, game.Name);
+                GameExited?.Invoke(this, game.Id);
+                return;
+            }
+
+            // 正常退出：执行备份流程
             // 通知：正在备份
             StatusChanged?.Invoke(this, new GameStatusInfo
             {

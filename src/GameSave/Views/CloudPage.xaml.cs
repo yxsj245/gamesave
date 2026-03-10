@@ -423,7 +423,7 @@ namespace GameSave.Views
                     CloseButtonText = "确定",
                     XamlRoot = this.XamlRoot
                 };
-                await dialog.ShowAsync();
+                await dialog.ShowWithThemeAsync();
 
                 if (success)
                 {
@@ -451,7 +451,7 @@ namespace GameSave.Views
                     CloseButtonText = "确定",
                     XamlRoot = this.XamlRoot
                 };
-                await dialog.ShowAsync();
+                await dialog.ShowWithThemeAsync();
 
                 if (success)
                 {
@@ -479,7 +479,7 @@ namespace GameSave.Views
                     CloseButtonText = "确定",
                     XamlRoot = this.XamlRoot
                 };
-                await dialog.ShowAsync();
+                await dialog.ShowWithThemeAsync();
             }
         }
 
@@ -500,7 +500,7 @@ namespace GameSave.Views
                     XamlRoot = this.XamlRoot
                 };
 
-                var result = await confirmDialog.ShowAsync();
+                var result = await confirmDialog.ShowWithThemeAsync();
                 if (result == ContentDialogResult.Primary)
                 {
                     var (success, message) = await ViewModel.DeleteGameFromCloudAsync(group);
@@ -540,7 +540,7 @@ namespace GameSave.Views
                     XamlRoot = this.XamlRoot
                 };
 
-                var result = await confirmDialog.ShowAsync();
+                var result = await confirmDialog.ShowWithThemeAsync();
                 if (result == ContentDialogResult.Primary)
                 {
                     var (success, message) = await ViewModel.DeleteCloudSaveAsync(save);
@@ -588,7 +588,7 @@ namespace GameSave.Views
                     CloseButtonText = "确定",
                     XamlRoot = this.XamlRoot
                 };
-                await hintDialog.ShowAsync();
+                await hintDialog.ShowWithThemeAsync();
                 return;
             }
 
@@ -602,7 +602,7 @@ namespace GameSave.Views
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await confirmDialog.ShowAsync();
+            var result = await confirmDialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
                 var savesToDelete = _selectedCloudSaves.ToList();

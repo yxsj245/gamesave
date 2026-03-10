@@ -13,6 +13,26 @@
         <StackPanel Spacing="24" MaxWidth="700">
             <TextBlock Text="设置" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
 
+            <!-- 外观设置 -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    CornerRadius="8"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    Padding="20">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="选择应用的显示主题" FontSize="13" Foreground="Gray"/>
+                    
+                    <RadioButtons x:Name="ThemeRadioButtons"
+                                  SelectedIndex="{x:Bind ViewModel.SelectedThemeIndex, Mode=TwoWay}"
+                                  MaxColumns="3">
+                        <RadioButton Content="跟随系统" Tag="System"/>
+                        <RadioButton Content="浅色模式" Tag="Light"/>
+                        <RadioButton Content="深色模式" Tag="Dark"/>
+                    </RadioButtons>
+                </StackPanel>
+            </Border>
+
             <!-- 工作目录设置 -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     CornerRadius="8"

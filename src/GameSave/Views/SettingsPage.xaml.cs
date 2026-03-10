@@ -167,7 +167,7 @@ namespace GameSave.Views
                     Content = scrollViewer
                 };
 
-                var result = await dialog.ShowAsync();
+                var result = await dialog.ShowWithThemeAsync();
 
                 if (result != ContentDialogResult.Primary)
                     break; // 用户取消
@@ -210,7 +210,7 @@ namespace GameSave.Views
                     XamlRoot = this.XamlRoot
                 };
 
-                var result = await confirmDialog.ShowAsync();
+                var result = await confirmDialog.ShowWithThemeAsync();
                 if (result == ContentDialogResult.Primary)
                 {
                     await ViewModel.RemoveCloudConfigAsync(config);
