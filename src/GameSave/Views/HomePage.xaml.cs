@@ -93,50 +93,6 @@ namespace GameSave.Views
 
         #region 游戏列表项交互
 
-        private void GameListItem_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element)
-            {
-                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
-                if (glowRect != null)
-                {
-                    glowRect.Opacity = 1;
-                }
-            }
-        }
-
-        private void GameListItem_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element)
-            {
-                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
-                if (glowRect != null)
-                {
-                    glowRect.Opacity = 0;
-                }
-            }
-        }
-
-        private void GameListItem_PointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element)
-            {
-                var glowRect = element.FindName("GlowRect") as Microsoft.UI.Xaml.Shapes.Rectangle;
-                var glowBrush = element.FindName("GlowBrush") as Microsoft.UI.Xaml.Media.RadialGradientBrush;
-
-                if (glowRect != null && glowBrush != null)
-                {
-                    var pointerPosition = e.GetCurrentPoint(element).Position;
-                    // Calculate relative position based on item size
-                    double xRelative = pointerPosition.X / element.ActualWidth;
-                    double yRelative = pointerPosition.Y / element.ActualHeight;
-
-                    glowBrush.Center = new Windows.Foundation.Point(xRelative, yRelative);
-                    glowBrush.GradientOrigin = new Windows.Foundation.Point(xRelative, yRelative);
-                }
-            }
-        }
-
         private void GamesList_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             // 检查点击源是否来自按钮控件（启动/停止按钮），如果是则不打开详情页
@@ -1114,7 +1070,12 @@ namespace GameSave.Views
                 game.ScheduledBackupMaxCount = (int)editMaxCountBox.Value;
 
                 var (success, message) = await ViewModel.UpdateGameAsync(game);
-                if (!success)
+                if (success)
+                {
+                    // 刷新图标缓存（ProcessPath 可能已变更）
+                    game.RefreshIcon();
+                }
+                else
                 {
                     await ShowMessageAsync("编辑失败", message);
                 }

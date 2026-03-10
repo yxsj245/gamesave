@@ -1,8 +1,8 @@
 using System.Text.Json.Serialization;
-
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using GameSave.Helpers;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace GameSave.Models;
 
@@ -84,6 +84,36 @@ public class Game : INotifyPropertyChanged
     /// <summary>是否设置了启动进程路径</summary>
     [JsonIgnore]
     public bool HasProcessPath => !string.IsNullOrWhiteSpace(ProcessPath);
+
+    private BitmapImage? _gameIconSource;
+    /// <summary>从游戏 EXE 提取的图标（缓存后返回 BitmapImage）</summary>
+    [JsonIgnore]
+    public BitmapImage? GameIconSource
+    {
+        get
+        {
+            if (_gameIconSource == null && HasProcessPath)
+            {
+                _gameIconSource = IconExtractorHelper.GetIconFromExe(ProcessPath);
+            }
+            return _gameIconSource;
+        }
+    }
+
+    /// <summary>是否有可用的游戏图标（用于 XAML 显示切换）</summary>
+    [JsonIgnore]
+    public bool HasGameIcon => GameIconSource != null;
+
+    /// <summary>
+    /// 刷新图标缓存（ProcessPath 变更后调用）
+    /// </summary>
+    public void RefreshIcon()
+    {
+        IconExtractorHelper.ClearCache(ProcessPath);
+        _gameIconSource = null;
+        OnPropertyChanged(nameof(GameIconSource));
+        OnPropertyChanged(nameof(HasGameIcon));
+    }
 
     private bool _isRunning;
     /// <summary>指示游戏当前是否正在运行</summary>

@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:GameSave.Models"
+    xmlns:helpers="using:GameSave.Helpers"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     mc:Ignorable="d">
 
@@ -129,13 +130,11 @@
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            PointerEntered="GameListItem_PointerEntered"
-                            PointerExited="GameListItem_PointerExited"
-                            PointerMoved="GameListItem_PointerMoved"
+                            helpers:GlowEffectHelper.IsEnabled="True"
                             RenderTransformOrigin="0.5,0.5">
                             
                             <Border.Background>
-                                <!-- The visible background of the card -->
+                                <!-- 卡片可见背景 -->
                                 <SolidColorBrush Color="{ThemeResource CardBackgroundFillColorDefault}" />
                             </Border.Background>
 
@@ -165,15 +164,6 @@
                             </Border.RenderTransform>
                             
                             <Grid>
-                                <!-- 底层光晕效果 -->
-                                <Rectangle x:Name="GlowRect" Opacity="0" IsHitTestVisible="False">
-                                    <Rectangle.Fill>
-                                        <RadialGradientBrush x:Name="GlowBrush" Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="1.5">
-                                            <GradientStop Color="#20FFFFFF" Offset="0"/>
-                                            <GradientStop Color="Transparent" Offset="1"/>
-                                        </RadialGradientBrush>
-                                    </Rectangle.Fill>
-                                </Rectangle>
                                 
                                 <Grid Margin="12,0" Background="Transparent">
                                     <Grid.ColumnDefinitions>
@@ -182,9 +172,21 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     
-                                    <!-- 游戏图标占用 -->
-                                    <Border Grid.Column="0" Width="48" Height="48" CornerRadius="4" Background="LightGray" VerticalAlignment="Center">
-                                        <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="Gray" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <!-- 游戏图标：优先显示从 EXE 提取的图标，否则显示默认图标 -->
+                                    <Border Grid.Column="0" Width="48" Height="48" CornerRadius="4" VerticalAlignment="Center">
+                                        <Grid>
+                                            <!-- 从 EXE 提取的图标 -->
+                                            <Image Source="{x:Bind GameIconSource, Mode=OneWay}" 
+                                                   Stretch="UniformToFill"
+                                                   Width="48" Height="48"
+                                                   Visibility="{x:Bind HasGameIcon, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"/>
+                                            <!-- 默认图标（无 EXE 图标时显示） -->
+                                            <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" 
+                                                    CornerRadius="4"
+                                                    Visibility="{x:Bind HasGameIcon, Converter={StaticResource InverseBoolVisibilityConverter}, Mode=OneWay}">
+                                                <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="Gray" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
                                     </Border>
                                     
                                     <!-- 游戏信息文本 -->
