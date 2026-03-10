@@ -90,6 +90,11 @@
                     <FontIcon Glyph="&#xE710;" />
                 </AppBarButton.Icon>
             </AppBarButton>
+            <AppBarButton Label="导入游戏" Click="ImportGames_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE8B5;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
         </CommandBar>
 
         <!-- 空状态提示 -->
@@ -191,10 +196,19 @@
                                     
                                     <!-- 游戏信息文本 -->
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
-                                        <TextBlock Text="{x:Bind Name}" 
-                                                   FontWeight="Bold" 
-                                                   FontSize="16" 
-                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{x:Bind Name}" 
+                                                       FontWeight="Bold" 
+                                                       FontSize="16" 
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <!-- 来源平台徽章 -->
+                                            <Border Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}" 
+                                                    CornerRadius="4" Padding="6,2" 
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind HasSource, Converter={StaticResource BoolVisibilityConverter}}">
+                                                <TextBlock Text="{x:Bind Source}" FontSize="11" Foreground="{ThemeResource SystemFillColorNeutralBrush}"/>
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="{x:Bind DisplayAddedAt}" 
                                                    Foreground="DarkGray" 
                                                    FontSize="12" 

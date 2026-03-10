@@ -341,6 +341,79 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// 从扫描结果批量添加游戏
+    /// </summary>
+    /// <param name="detectedGames">检测到的游戏列表（已勾选且需要导入的）</param>
+    /// <returns>成功和失败数量</returns>
+    public async Task<(int successCount, int failCount, string message)> BatchAddGamesAsync(List<DetectedGame> detectedGames)
+    {
+        if (detectedGames == null || detectedGames.Count == 0)
+            return (0, 0, "没有要导入的游戏");
+
+        IsBusy = true;
+        StatusMessage = "正在批量导入游戏...";
+
+        int successCount = 0;
+        int failCount = 0;
+        var errors = new List<string>();
+
+        try
+        {
+            foreach (var detected in detectedGames)
+            {
+                try
+                {
+                    // 存档目录为空则跳过（必填字段）
+                    if (string.IsNullOrWhiteSpace(detected.SaveFolderPath))
+                    {
+                        errors.Add($"「{detected.Name}」未设置存档目录，已跳过");
+                        failCount++;
+                        continue;
+                    }
+
+                    var game = new Game
+                    {
+                        Name = detected.Name.Trim(),
+                        SaveFolderPath = detected.SaveFolderPath.Trim(),
+                        ProcessPath = string.IsNullOrWhiteSpace(detected.ExePath) ? null : detected.ExePath.Trim(),
+                        ProcessArgs = string.IsNullOrWhiteSpace(detected.ProcessArgs) ? null : detected.ProcessArgs.Trim(),
+                        CloudConfigId = detected.CloudConfigId,
+                        Source = detected.Source,
+                        IconPath = "\uE7FC",
+                        ScheduledBackupEnabled = detected.ScheduledBackupEnabled,
+                        ScheduledBackupIntervalMinutes = detected.ScheduledBackupIntervalMinutes,
+                        ScheduledBackupMaxCount = detected.ScheduledBackupMaxCount
+                    };
+
+                    await _gameService.AddGameAsync(game);
+                    Games.Add(game);
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"「{detected.Name}」导入失败: {ex.Message}");
+                    failCount++;
+                }
+            }
+
+            StatusMessage = failCount > 0
+                ? $"批量导入完成：成功 {successCount} 个，失败 {failCount} 个"
+                : $"成功导入 {successCount} 个游戏！";
+
+            return (successCount, failCount, StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"批量导入失败: {ex.Message}";
+            return (successCount, failCount, StatusMessage);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     #endregion
 
     #region 编辑游戏

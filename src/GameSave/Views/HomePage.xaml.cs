@@ -424,6 +424,360 @@ namespace GameSave.Views
             }
         }
 
+        /// <summary>
+        /// 导入游戏按钮点击：扫描本地已安装游戏，弹出批量导入弹窗
+        /// </summary>
+        private async void ImportGames_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            // 1. 显示扫描中提示
+            var scanningDialog = new ContentDialog
+            {
+                Title = "正在扫描本地游戏...",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    Children =
+                    {
+                        new ProgressRing { IsActive = true, Width = 40, Height = 40, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center },
+                        new TextBlock { Text = "正在检测 Steam、Epic、GOG、Ubisoft、EA、Battle.net 平台...", HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center }
+                    }
+                },
+                XamlRoot = this.XamlRoot
+            };
+
+            // 异步扫描
+            var scanner = new GameScannerService();
+            List<DetectedGame>? detectedGames = null;
+
+            // 自动关闭扫描弹窗
+            _ = Task.Run(async () =>
+            {
+                detectedGames = await scanner.ScanAllPlatformsAsync();
+
+                // 过滤掉已导入的游戏（按 exe 路径或安装路径匹配）
+                var existingPaths = ViewModel.Games
+                    .Select(g => g.ProcessPath?.ToLowerInvariant().TrimEnd('\\', '/'))
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .ToHashSet();
+
+                var existingInstallBases = ViewModel.Games
+                    .Select(g => g.ProcessPath != null ? Path.GetDirectoryName(g.ProcessPath)?.ToLowerInvariant().TrimEnd('\\', '/') : null)
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .ToHashSet();
+
+                detectedGames = detectedGames
+                    .Where(d =>
+                    {
+                        // 按 exe 路径排重
+                        if (!string.IsNullOrEmpty(d.ExePath) &&
+                            existingPaths.Contains(d.ExePath.ToLowerInvariant().TrimEnd('\\', '/')))
+                            return false;
+
+                        // 按安装路径排重
+                        if (existingInstallBases.Contains(d.InstallPath.ToLowerInvariant().TrimEnd('\\', '/')))
+                            return false;
+
+                        return true;
+                    })
+                    .ToList();
+
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                {
+                    scanningDialog.Hide();
+                });
+            });
+
+            await scanningDialog.ShowWithThemeAsync();
+
+            // 2. 检查扫描结果
+            if (detectedGames == null || detectedGames.Count == 0)
+            {
+                await ShowMessageAsync("扫描完成", "未发现新的本地游戏，可能所有检测到的游戏已经被添加。");
+                return;
+            }
+
+            // 3. 构建批量导入弹窗
+            var importDialog = new ContentDialog
+            {
+                Title = $"发现 {detectedGames.Count} 个本地游戏",
+                PrimaryButtonText = "导入所选",
+                SecondaryButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 500
+            };
+
+            var mainPanel = new StackPanel { Spacing = 8, MinWidth = 500 };
+
+            // 全选/取消全选
+            var selectAllCheckBox = new CheckBox
+            {
+                Content = "全选 / 取消全选",
+                IsChecked = true,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 8)
+            };
+            mainPanel.Children.Add(selectAllCheckBox);
+
+            // 为每个游戏构建一个 Expander
+            var gameExpanders = new List<(Expander expander, DetectedGame game, TextBox savePathBox, TextBox processArgsBox, ComboBox? cloudCombo, ToggleSwitch scheduledToggle, NumberBox intervalBox, NumberBox maxCountBox)>();
+
+            foreach (var detected in detectedGames)
+            {
+                // ---- Expander Header：CheckBox + 游戏名 + 来源徽章 ----
+                var headerPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center };
+
+                var gameCheckBox = new CheckBox { IsChecked = true, MinWidth = 0, Padding = new Microsoft.UI.Xaml.Thickness(0) };
+                // 双向绑定到 detected.IsSelected
+                gameCheckBox.Checked += (s, args) => detected.IsSelected = true;
+                gameCheckBox.Unchecked += (s, args) => detected.IsSelected = false;
+                headerPanel.Children.Add(gameCheckBox);
+
+                headerPanel.Children.Add(new TextBlock
+                {
+                    Text = detected.Name,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                    MaxWidth = 280,
+                    TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis
+                });
+
+                // 来源徽章
+                headerPanel.Children.Add(new Border
+                {
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        detected.Source switch
+                        {
+                            "Steam" => Windows.UI.Color.FromArgb(255, 27, 40, 56),
+                            "Epic" => Windows.UI.Color.FromArgb(255, 45, 45, 45),
+                            "GOG" => Windows.UI.Color.FromArgb(255, 102, 46, 155),
+                            "Ubisoft" => Windows.UI.Color.FromArgb(255, 0, 98, 175),
+                            "EA" => Windows.UI.Color.FromArgb(255, 0, 100, 0),
+                            "Battle.net" => Windows.UI.Color.FromArgb(255, 0, 108, 190),
+                            _ => Windows.UI.Color.FromArgb(255, 100, 100, 100)
+                        }),
+                    CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4),
+                    Padding = new Microsoft.UI.Xaml.Thickness(8, 2, 8, 2),
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                    Child = new TextBlock { Text = detected.Source, FontSize = 11, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) }
+                });
+
+                // ---- Expander Content：表单字段 ----
+                var contentPanel = new StackPanel { Spacing = 10, Padding = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 0) };
+
+                // 游戏名称（可编辑）
+                var nameBox = new TextBox { Header = "游戏名称", Text = detected.Name };
+                nameBox.TextChanged += (s, args) => detected.Name = nameBox.Text;
+                contentPanel.Children.Add(nameBox);
+
+                // 启动进程（已自动填充）
+                var exeInfo = new TextBox
+                {
+                    Header = "启动进程（已自动检测）",
+                    Text = detected.ExePath ?? "未检测到",
+                    IsReadOnly = true,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        string.IsNullOrEmpty(detected.ExePath) ? Microsoft.UI.Colors.OrangeRed : Microsoft.UI.Colors.Gray)
+                };
+                contentPanel.Children.Add(exeInfo);
+
+                // 存档目录（必须用户手动选择）
+                var savePathPanel = new Grid();
+                savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var savePathBox = new TextBox
+                {
+                    Header = "游戏存档目录 *",
+                    PlaceholderText = "请选择游戏存档目录",
+                    IsReadOnly = true
+                };
+                Grid.SetColumn(savePathBox, 0);
+
+                var browseSaveBtn = new Button
+                {
+                    Content = "浏览",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
+                };
+                browseSaveBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FolderPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var folder = await picker.PickSingleFolderAsync();
+                    if (folder != null)
+                    {
+                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                        detected.SaveFolderPath = savePathBox.Text;
+                    }
+                };
+                Grid.SetColumn(browseSaveBtn, 1);
+
+                savePathPanel.Children.Add(savePathBox);
+                savePathPanel.Children.Add(browseSaveBtn);
+                contentPanel.Children.Add(savePathPanel);
+
+                // 启动参数
+                var processArgsBox = new TextBox
+                {
+                    Header = "启动附加参数（可选）",
+                    PlaceholderText = "例如: -windowed -dx12"
+                };
+                processArgsBox.TextChanged += (s, args) => detected.ProcessArgs = processArgsBox.Text;
+                contentPanel.Children.Add(processArgsBox);
+
+                // 云端服务商
+                ComboBox? cloudCombo = null;
+                if (ViewModel.CloudConfigs.Count > 0)
+                {
+                    cloudCombo = new ComboBox
+                    {
+                        Header = "云端服务商（可选）",
+                        PlaceholderText = "不使用云端同步",
+                        HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                        DisplayMemberPath = "DisplayName"
+                    };
+                    cloudCombo.ItemsSource = ViewModel.CloudConfigs;
+                    cloudCombo.SelectionChanged += (s, args) =>
+                    {
+                        detected.CloudConfigId = (cloudCombo.SelectedItem as CloudConfig)?.Id;
+                    };
+                    contentPanel.Children.Add(cloudCombo);
+                }
+
+                // 定时备份开关
+                var scheduledToggle = new ToggleSwitch
+                {
+                    Header = "启用定时备份",
+                    IsOn = false,
+                    OnContent = "已启用",
+                    OffContent = "已关闭"
+                };
+                contentPanel.Children.Add(scheduledToggle);
+
+                var intervalBox = new NumberBox
+                {
+                    Header = "备份间隔（分钟）",
+                    Value = 30,
+                    Minimum = 1,
+                    Maximum = 1440,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                    Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+                };
+                contentPanel.Children.Add(intervalBox);
+
+                var maxCountBox = new NumberBox
+                {
+                    Header = "最大备份数量",
+                    Value = 5,
+                    Minimum = 1,
+                    Maximum = 100,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                    Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+                };
+                contentPanel.Children.Add(maxCountBox);
+
+                scheduledToggle.Toggled += (s, args) =>
+                {
+                    var vis = scheduledToggle.IsOn ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+                    intervalBox.Visibility = vis;
+                    maxCountBox.Visibility = vis;
+                    detected.ScheduledBackupEnabled = scheduledToggle.IsOn;
+                };
+
+                // 创建 Expander
+                var expander = new Expander
+                {
+                    Header = headerPanel,
+                    Content = contentPanel,
+                    IsExpanded = false,
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch
+                };
+
+                mainPanel.Children.Add(expander);
+                gameExpanders.Add((expander, detected, savePathBox, processArgsBox, cloudCombo, scheduledToggle, intervalBox, maxCountBox));
+            }
+
+            // 全选/取消全选逻辑
+            selectAllCheckBox.Checked += (s, args) =>
+            {
+                foreach (var (_, game, _, _, _, _, _, _) in gameExpanders)
+                {
+                    game.IsSelected = true;
+                }
+                // 更新所有 CheckBox
+                foreach (var expanderItem in gameExpanders)
+                {
+                    if (expanderItem.expander.Header is StackPanel hp)
+                    {
+                        var cb = hp.Children.OfType<CheckBox>().FirstOrDefault();
+                        if (cb != null) cb.IsChecked = true;
+                    }
+                }
+            };
+            selectAllCheckBox.Unchecked += (s, args) =>
+            {
+                foreach (var (_, game, _, _, _, _, _, _) in gameExpanders)
+                {
+                    game.IsSelected = false;
+                }
+                foreach (var expanderItem in gameExpanders)
+                {
+                    if (expanderItem.expander.Header is StackPanel hp)
+                    {
+                        var cb = hp.Children.OfType<CheckBox>().FirstOrDefault();
+                        if (cb != null) cb.IsChecked = false;
+                    }
+                }
+            };
+
+            scrollViewer.Content = mainPanel;
+            importDialog.Content = scrollViewer;
+
+            var result = await importDialog.ShowWithThemeAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                // 收集用户填写的定时备份参数
+                foreach (var (_, detected, _, _, _, scheduledToggle, intervalBox, maxCountBox) in gameExpanders)
+                {
+                    detected.ScheduledBackupIntervalMinutes = (int)intervalBox.Value;
+                    detected.ScheduledBackupMaxCount = (int)maxCountBox.Value;
+                }
+
+                // 过滤出勾选的游戏
+                var selectedGames = detectedGames.Where(g => g.IsSelected).ToList();
+
+                if (selectedGames.Count == 0)
+                {
+                    await ShowMessageAsync("提示", "未勾选任何游戏");
+                    return;
+                }
+
+                var (successCount, failCount, message) = await ViewModel.BatchAddGamesAsync(selectedGames);
+                UpdateEmptyState();
+
+                if (failCount > 0)
+                {
+                    await ShowMessageAsync("导入结果", message);
+                }
+                else if (successCount > 0)
+                {
+                    await ShowMessageAsync("导入成功", message);
+                }
+            }
+        }
+
         #endregion
 
         #region 启动游戏

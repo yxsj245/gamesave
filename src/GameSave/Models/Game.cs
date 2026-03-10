@@ -46,6 +46,13 @@ public class Game : INotifyPropertyChanged
     /// <summary>备注</summary>
     public string? Notes { get; set; }
 
+    /// <summary>游戏来源平台（如 Steam、Epic、GOG 等，默认"手动添加"）</summary>
+    public string Source { get; set; } = "手动添加";
+
+    /// <summary>是否有来源平台标识（用于 UI 显示来源徽章）</summary>
+    [JsonIgnore]
+    public bool HasSource => !string.IsNullOrEmpty(Source) && Source != "手动添加";
+
     /// <summary>是否启用定时备份</summary>
     public bool ScheduledBackupEnabled { get; set; } = false;
 
