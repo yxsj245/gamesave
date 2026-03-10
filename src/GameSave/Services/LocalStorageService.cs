@@ -133,9 +133,16 @@ public class LocalStorageService : IStorageService
         if (game == null)
             throw new InvalidOperationException($"找不到对应的游戏信息 (ID: {saveFile.GameId})");
 
-        // 清空游戏存档目录
+        // 检测存档目录文件是否被其他进程占用
         if (Directory.Exists(game.ResolvedSaveFolderPath))
         {
+            var lockedFiles = CheckFilesLocked(game.ResolvedSaveFolderPath);
+            if (lockedFiles.Count > 0)
+            {
+                throw new IOException("检测到存档文件被进程占用，请退出游戏后还原，避免存档损坏");
+            }
+
+            // 清空游戏存档目录
             ClearDirectory(game.ResolvedSaveFolderPath);
         }
 
@@ -256,6 +263,34 @@ public class LocalStorageService : IStorageService
         {
             dir.Delete(true);
         }
+    }
+
+    /// <summary>
+    /// 检测目录下是否有文件被其他进程占用
+    /// </summary>
+    /// <returns>被占用的文件路径列表</returns>
+    private static List<string> CheckFilesLocked(string directoryPath)
+    {
+        var lockedFiles = new List<string>();
+        if (!Directory.Exists(directoryPath)) return lockedFiles;
+
+        foreach (var filePath in Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories))
+        {
+            try
+            {
+                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                lockedFiles.Add(filePath);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // 权限不足也视为被占用
+                lockedFiles.Add(filePath);
+            }
+        }
+        return lockedFiles;
     }
 
     /// <summary>

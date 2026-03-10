@@ -491,6 +491,10 @@ public class GameService
 
         await _localStorageService.RestoreSaveAsync(saveFile, progress);
 
+        // 还原成功后，同步更新退出存档
+        // 防止下次启动游戏时旧的退出存档覆盖还原后的内容
+        await _localStorageService.CreateExitSaveAsync(game);
+
         // 通知恢复完成
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
