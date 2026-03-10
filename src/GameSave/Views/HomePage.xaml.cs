@@ -910,9 +910,9 @@ namespace GameSave.Views
             var result = await dialog.ShowWithThemeAsync();
             if (result == ContentDialogResult.Primary)
             {
-                ViewModel.SelectedGame = game;
                 bool deleteCloud = deleteCloudCheckBox?.IsChecked == true;
-                var (success, message) = await ViewModel.DeleteGameAsync(deleteCloud);
+                // 使用直接传递游戏对象的重载，避免设置 SelectedGame 触发详情面板显示存档列表
+                var (success, message) = await ViewModel.DeleteGameAsync(game, deleteCloud);
                 if (success)
                 {
                     UpdateEmptyState();

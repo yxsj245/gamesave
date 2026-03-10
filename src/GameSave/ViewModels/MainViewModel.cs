@@ -665,14 +665,37 @@ public partial class MainViewModel : BaseViewModel
         if (SelectedGame == null)
             return (false, "请先选择一个游戏");
 
+        return await DeleteGameCoreAsync(SelectedGame, deleteCloudSaves);
+    }
+
+    /// <summary>
+    /// 删除指定的游戏（供右键菜单等不需要设置 SelectedGame 的场景使用）
+    /// </summary>
+    /// <param name="game">要删除的游戏</param>
+    /// <param name="deleteCloudSaves">是否同时删除云端存档</param>
+    public async Task<(bool success, string message)> DeleteGameAsync(Game game, bool deleteCloudSaves = false)
+    {
+        if (game == null)
+            return (false, "请先选择一个游戏");
+
+        return await DeleteGameCoreAsync(game, deleteCloudSaves);
+    }
+
+    /// <summary>
+    /// 删除游戏的核心实现：先关闭详情面板再执行删除，避免删除过程中显示存档列表
+    /// </summary>
+    private async Task<(bool success, string message)> DeleteGameCoreAsync(Game gameToDelete, bool deleteCloudSaves)
+    {
         IsBusy = true;
 
         try
         {
-            var gameName = SelectedGame.Name;
-            var gameToDelete = SelectedGame;
+            var gameName = gameToDelete.Name;
 
-            // 若需要删除云端存档，先执行云端删除
+            // 先关闭详情面板，避免在删除云端存档等待期间显示存档列表
+            CloseDetails();
+
+            // 若需要删除云端存档，执行云端删除
             if (deleteCloudSaves && !string.IsNullOrEmpty(gameToDelete.CloudConfigId))
             {
                 try
@@ -693,7 +716,6 @@ public partial class MainViewModel : BaseViewModel
                 }
             }
 
-            CloseDetails();
             Games.Remove(gameToDelete);
             await _gameService.DeleteGameAsync(gameToDelete);
 
