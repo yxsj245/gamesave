@@ -313,7 +313,7 @@ public class GameService
                 Status = GameRunStatus.BackingUp,
                 GameName = game.Name,
                 GameId = game.Id,
-                Message = $"游戏 {game.Name} 已退出，正在备份存档..."
+                Message = $"游戏 {game.Name} 已退出，正在创建存档快照并备份..."
             });
 
             // 进程退出后自动备份
@@ -391,7 +391,7 @@ public class GameService
                 Status = GameRunStatus.BackingUp,
                 GameName = game.Name,
                 GameId = game.Id,
-                Message = $"正在手动备份 {game.Name}...",
+                Message = $"正在创建 {game.Name} 的存档快照并备份...",
                 Progress = p
             });
         });

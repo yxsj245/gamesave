@@ -9,6 +9,9 @@ namespace GameSave.Services;
 /// </summary>
 public class LocalStorageService : IStorageService
 {
+    /// <summary>热备份临时快照目录名称</summary>
+    private const string TempSnapshotDirName = "_temp_snapshot";
+
     private readonly ConfigService _configService;
 
     public LocalStorageService(ConfigService configService)
@@ -28,6 +31,7 @@ public class LocalStorageService : IStorageService
         if (!Directory.Exists(gameWorkDir))
             return Task.FromResult(saves);
 
+        // 过滤掉临时快照目录下的文件，避免误识别
         foreach (var tarFile in Directory.GetFiles(gameWorkDir, "*.tar"))
         {
             var fileName = Path.GetFileNameWithoutExtension(tarFile);
@@ -70,12 +74,32 @@ public class LocalStorageService : IStorageService
             throw new InvalidOperationException("存档目录下没有可备份的文件");
 
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
+        var snapshotDir = Path.Combine(gameWorkDir, TempSnapshotDirName);
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var tarFileName = $"{timestamp}_{backupName}.tar";
         var tarFilePath = Path.Combine(gameWorkDir, tarFileName);
 
-        // 打包存档目录为 .tar
-        await TarHelper.CreateTarAsync(game.ResolvedSaveFolderPath, tarFilePath, progress);
+        try
+        {
+            // 热备份第一步：将游戏存档目录复制到临时快照目录
+            // 使用 FileShare.ReadWrite 模式避免与游戏进程的文件锁定冲突
+            CopyDirectoryRecursive(game.ResolvedSaveFolderPath, snapshotDir);
+
+            // 热备份第二步：对临时快照目录进行 tar 打包
+            await TarHelper.CreateTarAsync(snapshotDir, tarFilePath, progress);
+        }
+        finally
+        {
+            // 热备份第三步：清理临时快照目录
+            if (Directory.Exists(snapshotDir))
+            {
+                try { Directory.Delete(snapshotDir, true); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"清理临时快照目录失败: {ex.Message}");
+                }
+            }
+        }
 
         var fileInfo = new FileInfo(tarFilePath);
         var saveFile = new SaveFile
@@ -231,6 +255,39 @@ public class LocalStorageService : IStorageService
         foreach (var dir in di.EnumerateDirectories())
         {
             dir.Delete(true);
+        }
+    }
+
+    /// <summary>
+    /// 递归复制目录（热备份用）
+    /// 使用 FileShare.ReadWrite 模式打开源文件，避免与游戏进程的文件锁定冲突
+    /// </summary>
+    /// <param name="sourceDir">源目录路径</param>
+    /// <param name="destDir">目标目录路径</param>
+    private static void CopyDirectoryRecursive(string sourceDir, string destDir)
+    {
+        // 如果目标目录已存在，先清理
+        if (Directory.Exists(destDir))
+            Directory.Delete(destDir, true);
+
+        Directory.CreateDirectory(destDir);
+
+        // 复制文件：使用 FileShare.ReadWrite 允许读取被游戏进程占用的文件
+        foreach (var filePath in Directory.GetFiles(sourceDir))
+        {
+            var destFile = Path.Combine(destDir, Path.GetFileName(filePath));
+            using var sourceStream = new FileStream(
+                filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var destStream = new FileStream(
+                destFile, FileMode.Create, FileAccess.Write);
+            sourceStream.CopyTo(destStream);
+        }
+
+        // 递归复制子目录
+        foreach (var dirPath in Directory.GetDirectories(sourceDir))
+        {
+            var dirName = Path.GetFileName(dirPath);
+            CopyDirectoryRecursive(dirPath, Path.Combine(destDir, dirName));
         }
     }
 

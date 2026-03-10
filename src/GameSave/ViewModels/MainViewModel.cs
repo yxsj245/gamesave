@@ -18,11 +18,15 @@ public partial class MainViewModel : BaseViewModel
         _gameService = App.GameService;
 
         // 监听游戏退出事件，刷新存档列表
-        _gameService.GameExited += async (_, gameId) =>
+        // 注意：GameExited 事件从后台线程触发，必须调度回 UI 线程更新绑定属性
+        _gameService.GameExited += (_, gameId) =>
         {
             if (SelectedGame?.Id == gameId)
             {
-                await LoadSavesForGameAsync(gameId);
+                App.MainWindow?.DispatcherQueue?.TryEnqueue(async () =>
+                {
+                    await LoadSavesForGameAsync(gameId);
+                });
             }
         };
     }
