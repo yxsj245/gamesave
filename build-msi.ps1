@@ -270,6 +270,8 @@ wix build `
     -src "$InstallerDir\Package.wxs" `
     -src "$HarvestFile" `
     -ext WixToolset.UI.wixext `
+    -culture zh-CN `
+    -bindpath "$InstallerDir" `
     -d "ProductVersion=$Version" `
     -d "IconPath=$IconFile" `
     -o "$OutputMsi"
