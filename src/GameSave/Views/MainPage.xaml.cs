@@ -31,6 +31,41 @@ namespace GameSave.Views
             ContentFrame.Navigate(typeof(HomePage));
         }
 
+        private void NavView_PaneOpening(NavigationView sender, object args)
+        {
+            // 侧边栏展开时，为内容区域添加平滑过渡动画
+            ApplyContentTransition();
+        }
+
+        private void NavView_PaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
+        {
+            // 侧边栏收起时，为内容区域添加平滑过渡动画
+            ApplyContentTransition();
+        }
+
+        /// <summary>
+        /// 为内容区域应用平滑的布局过渡动画
+        /// </summary>
+        private void ApplyContentTransition()
+        {
+            // 使用 RepositionThemeTransition 实现平滑的位移过渡
+            ContentFrame.Transitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection
+            {
+                new Microsoft.UI.Xaml.Media.Animation.RepositionThemeTransition()
+            };
+
+            // 动画完成后移除 Transitions，避免其他场景不必要的动画
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(500);
+            timer.IsRepeating = false;
+            timer.Tick += (s, e) =>
+            {
+                ContentFrame.Transitions = null;
+                timer.Stop();
+            };
+            timer.Start();
+        }
+
         private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
             if (args.IsSettingsSelected)

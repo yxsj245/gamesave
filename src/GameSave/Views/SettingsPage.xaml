@@ -5,156 +5,172 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:GameSave.Controls"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     Loaded="Page_Loaded"
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="24" MaxWidth="700">
+        <StackPanel Spacing="24">
             <TextBlock Text="设置" FontSize="28" FontWeight="Bold" Margin="0,0,0,8"/>
 
-            <!-- 外观设置 -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    CornerRadius="8"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    Padding="20">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="选择应用的显示主题" FontSize="13" Foreground="Gray"/>
-                    
-                    <RadioButtons x:Name="ThemeRadioButtons"
-                                  SelectedIndex="{x:Bind ViewModel.SelectedThemeIndex, Mode=TwoWay}"
-                                  MaxColumns="3">
-                        <RadioButton Content="跟随系统" Tag="System"/>
-                        <RadioButton Content="浅色模式" Tag="Light"/>
-                        <RadioButton Content="深色模式" Tag="Dark"/>
-                    </RadioButtons>
-                </StackPanel>
-            </Border>
+            <!-- 自适应卡片布局 - 根据窗口宽度自动调整列数 -->
+            <controls:AdaptiveWrapPanel MinItemWidth="300" HorizontalSpacing="16" VerticalSpacing="16">
 
-            <!-- 工作目录设置 -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    CornerRadius="8"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    Padding="20">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="工作目录" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="所有游戏存档备份文件将保存在此目录下" FontSize="13" Foreground="Gray"/>
-                    
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        
-                        <TextBox x:Name="WorkDirTextBox" 
-                                 Grid.Column="0"
-                                 IsReadOnly="True"
-                                 Text="{x:Bind ViewModel.WorkDirectory, Mode=OneWay}"/>
-                        <Button Grid.Column="1" 
-                                Content="更改" 
-                                Margin="8,0,0,0"
-                                Click="ChangeWorkDir_Click"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- 云端存储配置 -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    CornerRadius="8"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    Padding="20">
-                <StackPanel Spacing="16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="云端存储" FontSize="16" FontWeight="SemiBold"/>
-                            <TextBlock Text="配置云端存储服务商，实现存档自动同步" FontSize="13" Foreground="Gray" Margin="0,4,0,0"/>
+                <!-- 外观设置 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE790;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                            <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <Button Grid.Column="1" 
-                                Content="添加配置"
-                                VerticalAlignment="Center"
-                                Click="AddCloudConfig_Click">
-                            <Button.Resources>
-                                <FontIcon x:Key="Icon" Glyph="&#xE710;"/>
-                            </Button.Resources>
-                        </Button>
-                    </Grid>
+                        <TextBlock Text="选择应用的显示主题" FontSize="13" Foreground="Gray"/>
+                        
+                        <RadioButtons x:Name="ThemeRadioButtons"
+                                      SelectedIndex="{x:Bind ViewModel.SelectedThemeIndex, Mode=TwoWay}"
+                                      MaxColumns="3">
+                            <RadioButton Content="跟随系统" Tag="System"/>
+                            <RadioButton Content="浅色模式" Tag="Light"/>
+                            <RadioButton Content="深色模式" Tag="Dark"/>
+                        </RadioButtons>
+                    </StackPanel>
+                </Border>
 
-                    <!-- 已有配置列表 -->
-                    <ListView x:Name="CloudConfigListView"
-                              ItemsSource="{x:Bind ViewModel.CloudConfigs, Mode=OneWay}"
-                              SelectionMode="None">
-                        <ListView.ItemContainerTransitions>
-                            <TransitionCollection>
-                                <EntranceThemeTransition IsStaggeringEnabled="True"/>
-                            </TransitionCollection>
-                        </ListView.ItemContainerTransitions>
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Padding="8,12" Margin="0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                <!-- 工作目录设置 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                            <TextBlock Text="工作目录" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="所有游戏存档备份文件将保存在此目录下" FontSize="13" Foreground="Gray"/>
+                        
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBox x:Name="WorkDirTextBox" 
+                                     Grid.Column="0"
+                                     IsReadOnly="True"
+                                     Text="{x:Bind ViewModel.WorkDirectory, Mode=OneWay}"/>
+                            <Button Grid.Column="1" 
+                                    Content="更改" 
+                                    Margin="8,0,0,0"
+                                    Click="ChangeWorkDir_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-                                    <!-- 图标 -->
-                                    <FontIcon Grid.Column="0" Glyph="&#xE753;" 
-                                              FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                                              VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <!-- 云端存储配置 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE753;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                                <TextBlock Text="云端存储" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" 
+                                    Content="添加配置"
+                                    VerticalAlignment="Center"
+                                    Click="AddCloudConfig_Click">
+                                <Button.Resources>
+                                    <FontIcon x:Key="Icon" Glyph="&#xE710;"/>
+                                </Button.Resources>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="配置云端存储服务商，实现存档自动同步" FontSize="13" Foreground="Gray" Margin="0,-8,0,0"/>
 
-                                    <!-- 配置信息 -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock FontSize="12" Foreground="Gray">
-                                            <Run Text="阿里云 OSS · "/>
-                                            <Run Text="{Binding BucketName}"/>
-                                        </TextBlock>
-                                    </StackPanel>
+                        <!-- 已有配置列表 -->
+                        <ListView x:Name="CloudConfigListView"
+                                  ItemsSource="{x:Bind ViewModel.CloudConfigs, Mode=OneWay}"
+                                  SelectionMode="None">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition IsStaggeringEnabled="True"/>
+                                </TransitionCollection>
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="8,12" Margin="0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <!-- 删除按钮 -->
-                                    <Button Grid.Column="2" 
-                                            VerticalAlignment="Center"
-                                            Click="DeleteCloudConfig_Click"
-                                            Tag="{Binding}"
-                                            Background="Transparent"
-                                            BorderThickness="0">
-                                        <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="Gray"/>
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                                        <!-- 图标 -->
+                                        <FontIcon Grid.Column="0" Glyph="&#xE753;" 
+                                                  FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                  VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                    <!-- 空列表提示 -->
-                    <TextBlock x:Name="NoConfigHint"
-                               Text="暂未配置云端存储，点击上方「添加配置」开始使用"
-                               FontSize="13" Foreground="Gray" 
-                               HorizontalAlignment="Center"
-                               Margin="0,8,0,0"/>
-                </StackPanel>
-            </Border>
+                                        <!-- 配置信息 -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold"/>
+                                            <TextBlock FontSize="12" Foreground="Gray">
+                                                <Run Text="阿里云 OSS · "/>
+                                                <Run Text="{Binding BucketName}"/>
+                                            </TextBlock>
+                                        </StackPanel>
 
-            <!-- 关于信息 -->
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    CornerRadius="8"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    Padding="20">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="关于" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="GameSave Manager" FontSize="14"/>
-                    <TextBlock Text="一款简洁的游戏存档备份与恢复工具" FontSize="13" Foreground="Gray"/>
-                    <TextBlock Text="版本: 1.0.0" FontSize="12" Foreground="Gray"/>
-                </StackPanel>
-            </Border>
+                                        <!-- 删除按钮 -->
+                                        <Button Grid.Column="2" 
+                                                VerticalAlignment="Center"
+                                                Click="DeleteCloudConfig_Click"
+                                                Tag="{Binding}"
+                                                Background="Transparent"
+                                                BorderThickness="0">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="Gray"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- 空列表提示 -->
+                        <TextBlock x:Name="NoConfigHint"
+                                   Text="暂未配置云端存储，点击上方「添加配置」开始使用"
+                                   FontSize="13" Foreground="Gray" 
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 关于信息 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE946;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                            <TextBlock Text="关于" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="GameSave Manager" FontSize="14"/>
+                        <TextBlock Text="一款简洁的游戏存档备份与恢复工具" FontSize="13" Foreground="Gray"/>
+                        <TextBlock Text="版本: 1.0.0" FontSize="12" Foreground="Gray"/>
+                    </StackPanel>
+                </Border>
+
+            </controls:AdaptiveWrapPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

@@ -11,13 +11,15 @@
 
     <Grid>
         <!-- 主导航栏 -->
-        <NavigationView
+            <NavigationView
             x:Name="NavView"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"
             PaneDisplayMode="Left"
             OpenPaneLength="200"
-            SelectionChanged="NavView_SelectionChanged">
+            SelectionChanged="NavView_SelectionChanged"
+            PaneOpening="NavView_PaneOpening"
+            PaneClosing="NavView_PaneClosing">
 
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="我的游戏" Tag="Home" IsSelected="True">
@@ -51,8 +53,12 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- 页面内容帧 -->
-                <Frame x:Name="ContentFrame" Grid.Row="0"/>
+                <!-- 页面内容帧 - 禁用 ContentTransitions 避免侧边栏展开/收起时的抖动 -->
+                <Frame x:Name="ContentFrame" Grid.Row="0">
+                    <Frame.ContentTransitions>
+                        <TransitionCollection/>
+                    </Frame.ContentTransitions>
+                </Frame>
 
                 <!-- 底部运行状态条 (游戏运行时可见) -->
                 <Border x:Name="StatusBar" 
