@@ -163,10 +163,8 @@ namespace GameSave.Views
             {
                 if (game.IsRunning)
                 {
-                    // 停止游戏 - 需要先设置 SelectedGame 才能让 StopGame 找到对应游戏
-                    var previousSelected = ViewModel.SelectedGame;
-                    // 临时保存之前的选中状态，避免触发详情面板
-                    ViewModel.StopGameDirect(game);
+                    // 停止游戏 - 异步执行并显示加载反馈
+                    await ViewModel.StopGameDirectAsync(game);
                 }
                 else
                 {

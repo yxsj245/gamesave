@@ -240,4 +240,39 @@ public class ProcessMonitorService
             Debug.WriteLine($"结束进程失败 PID={processId}: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 根据进程名结束所有匹配的进程
+    /// 用于 Steam 游戏场景下原始 PID 已失效时，通过进程名杀掉真实游戏进程
+    /// </summary>
+    /// <param name="processName">进程名（不含扩展名）</param>
+    public static void StopProcessByName(string processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName))
+            return;
+
+        try
+        {
+            var processes = Process.GetProcessesByName(processName);
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(true); // 递归结束进程树
+                        Debug.WriteLine($"已通过进程名结束进程 {processName} (PID={process.Id})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"结束进程 {processName} (PID={process.Id}) 失败: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"通过进程名 {processName} 结束进程失败: {ex.Message}");
+        }
+    }
 }

@@ -405,23 +405,65 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 停止选中的游戏
     /// </summary>
-    public void StopGame()
+    public async Task StopGameAsync()
     {
-        if (_gameService.IsGameRunning && _gameService.RunningProcessId != 0 && SelectedGame != null && _gameService.RunningGameId == SelectedGame.Id)
+        if (SelectedGame != null)
         {
-            ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
+            await StopGameCoreAsync(SelectedGame);
         }
     }
 
     /// <summary>
     /// 直接停止指定游戏（不触发详情面板），供列表按钮使用
     /// </summary>
-    public void StopGameDirect(Game game)
+    public async Task StopGameDirectAsync(Game game)
     {
-        if (_gameService.IsGameRunning && _gameService.RunningProcessId != 0 && _gameService.RunningGameId == game.Id)
+        await StopGameCoreAsync(game);
+    }
+
+    /// <summary>
+    /// 停止游戏的核心实现：先尝试通过 PID 结束，再尝试通过进程名结束
+    /// 解决 Steam 游戏场景下原始 stub 进程 PID 已失效导致停止无反应的问题
+    /// </summary>
+    private async Task StopGameCoreAsync(Game game)
+    {
+        if (!_gameService.IsGameRunning || _gameService.RunningGameId != game.Id)
+            return;
+
+        // 显示加载反馈
+        game.IsStopping = true;
+
+        try
         {
-            ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
+            // 在后台线程执行进程结束操作，避免阻塞 UI
+            await Task.Run(() =>
+            {
+                // 1. 先尝试通过 PID 结束
+                if (_gameService.RunningProcessId != 0)
+                {
+                    ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
+                }
+
+                // 2. 再尝试通过进程名结束（覆盖 Steam 游戏 stub 进程已退出、真实游戏进程 PID 不同的场景）
+                if (!string.IsNullOrEmpty(_gameService.RunningProcessName))
+                {
+                    ProcessMonitorService.StopProcessByName(_gameService.RunningProcessName);
+                }
+                // 3. 最后通过游戏配置的进程路径名称兜底
+                else if (!string.IsNullOrWhiteSpace(game.ProcessPath))
+                {
+                    var processName = System.IO.Path.GetFileNameWithoutExtension(game.ProcessPath);
+                    ProcessMonitorService.StopProcessByName(processName);
+                }
+            });
         }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[停止游戏] 结束进程异常: {ex.Message}");
+            // 异常时也需要清除停止状态
+            game.IsStopping = false;
+        }
+        // 注意：IsStopping 会在 IsRunning 变为 false 时自动清除
     }
 
     /// <summary>

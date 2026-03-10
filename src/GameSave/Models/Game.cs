@@ -62,6 +62,12 @@ public class Game : INotifyPropertyChanged
             {
                 _isRunning = value;
                 OnPropertyChanged();
+                // 进程状态改变时，重置停止中状态
+                if (!value)
+                {
+                    IsStopping = false;
+                    RunningPid = 0;
+                }
                 // 同时通知启动/停止按钮可见性变化
                 OnPropertyChanged(nameof(CanShowStartButton));
                 OnPropertyChanged(nameof(CanShowStopButton));
@@ -69,13 +75,74 @@ public class Game : INotifyPropertyChanged
         }
     }
 
-    /// <summary>是否显示启动按钮（有进程路径且未运行）</summary>
+    private int _runningPid;
+    /// <summary>当前运行的进程 PID</summary>
     [JsonIgnore]
-    public bool CanShowStartButton => HasProcessPath && !IsRunning;
+    public int RunningPid
+    {
+        get => _runningPid;
+        set
+        {
+            if (_runningPid != value)
+            {
+                _runningPid = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayRunningPid));
+            }
+        }
+    }
 
-    /// <summary>是否显示停止按钮（有进程路径且正在运行）</summary>
+    /// <summary>显示用的进程 PID 文本</summary>
     [JsonIgnore]
-    public bool CanShowStopButton => HasProcessPath && IsRunning;
+    public string DisplayRunningPid => RunningPid > 0 ? $"PID: {RunningPid}" : string.Empty;
+
+    private string _launchStatusMessage = string.Empty;
+    /// <summary>启动进度状态消息（在列表项启动按钮左侧显示）</summary>
+    [JsonIgnore]
+    public string LaunchStatusMessage
+    {
+        get => _launchStatusMessage;
+        set
+        {
+            if (_launchStatusMessage != value)
+            {
+                _launchStatusMessage = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLaunchStatus));
+            }
+        }
+    }
+
+    /// <summary>是否有启动状态消息需要显示</summary>
+    [JsonIgnore]
+    public bool HasLaunchStatus => !string.IsNullOrEmpty(LaunchStatusMessage);
+
+    /// <summary>是否显示启动按钮（有进程路径且未运行且未在停止中）</summary>
+    [JsonIgnore]
+    public bool CanShowStartButton => HasProcessPath && !IsRunning && !IsStopping;
+
+    private bool _isStopping;
+    /// <summary>指示游戏是否正在停止中（显示转圈加载反馈）</summary>
+    [JsonIgnore]
+    public bool IsStopping
+    {
+        get => _isStopping;
+        set
+        {
+            if (_isStopping != value)
+            {
+                _isStopping = value;
+                OnPropertyChanged();
+                // 停止中时隐藏停止按钮，显示加载指示
+                OnPropertyChanged(nameof(CanShowStopButton));
+                OnPropertyChanged(nameof(CanShowStartButton));
+            }
+        }
+    }
+
+    /// <summary>是否显示停止按钮（有进程路径且正在运行且未在停止中）</summary>
+    [JsonIgnore]
+    public bool CanShowStopButton => HasProcessPath && IsRunning && !IsStopping;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

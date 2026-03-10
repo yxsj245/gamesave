@@ -100,40 +100,15 @@ namespace GameSave.Views
                 switch (e.Status)
                 {
                     case GameRunStatus.Launching:
-                        // 正在启动游戏 — 显示状态栏和进度条
-                        StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-                        StatusBarIcon.Glyph = "\uE7FC"; // 火箭/启动图标
-                        StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                            Microsoft.UI.Colors.DodgerBlue);
-                        StatusBarText.Text = e.Message;
-                        StatusBarDetail.Text = $"正在准备启动 {e.GameName}";
-                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-                        if (e.Progress.HasValue)
-                        {
-                            StatusBarProgress.IsIndeterminate = false;
-                            StatusBarProgress.Value = e.Progress.Value;
-                        }
-                        else
-                        {
-                            StatusBarProgress.IsIndeterminate = true;
-                        }
-
-                        // 更新侧边栏状态
+                        // 启动进度已迁移到游戏列表项中显示，底部状态栏不再处理
+                        // 仅更新侧边栏状态指示
                         StatusNavItem.Content = $"正在启动 {e.GameName}...";
                         StatusIcon.Glyph = "\uE7FC";
                         break;
 
                     case GameRunStatus.Running:
-                        // 游戏运行中 — 显示状态栏, 更新侧边栏
-                        StatusBar.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-                        StatusBarIcon.Glyph = "\uE768"; // Play 图标
-                        StatusBarIcon.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                            Microsoft.UI.Colors.LimeGreen);
-                        StatusBarText.Text = $"{e.GameName} 运行中";
-                        StatusBarDetail.Text = $"PID: {e.ProcessId}";
-                        StatusBarProgress.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-
-                        // 更新侧边栏状态
+                        // 运行状态已通过列表项的停止按钮体现，底部状态栏不再显示
+                        // 仅更新侧边栏状态指示
                         StatusNavItem.Content = $"{e.GameName} 运行中";
                         StatusIcon.Glyph = "\uE768";
                         break;

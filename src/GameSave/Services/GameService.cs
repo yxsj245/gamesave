@@ -68,6 +68,9 @@ public class GameService
     /// <summary>当前运行中的进程 PID</summary>
     public int RunningProcessId { get; private set; }
 
+    /// <summary>当前运行中的进程名（不含扩展名，用于 Steam 游戏场景下通过进程名结束进程）</summary>
+    public string? RunningProcessName { get; private set; }
+
     public GameService(ConfigService configService, LocalStorageService localStorageService, ProcessMonitorService processMonitorService)
     {
         _configService = configService;
@@ -120,6 +123,7 @@ public class GameService
             throw new InvalidOperationException("未设置游戏启动进程路径");
 
         // 通知：开始启动游戏流程
+        game.LaunchStatusMessage = $"正在检查本地存档...";
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Launching,
@@ -133,6 +137,9 @@ public class GameService
         var latestExitSave = await _localStorageService.GetLatestExitSaveAsync(game.Id);
 
         // 更新进度：存档检查完成
+        game.LaunchStatusMessage = latestExitSave != null
+            ? "发现退出存档，正在校验..."
+            : "无本地存档，准备启动...";
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Launching,
@@ -150,6 +157,9 @@ public class GameService
             var isValid = await TarHelper.ValidateTarAsync(latestExitSave.Path);
 
             // 更新进度：校验完成
+            game.LaunchStatusMessage = isValid
+                ? "存档校验通过，正在恢复..."
+                : "存档校验失败";
             StatusChanged?.Invoke(this, new GameStatusInfo
             {
                 Status = GameRunStatus.Launching,
@@ -170,6 +180,7 @@ public class GameService
                     if (!shouldContinue)
                     {
                         // 用户取消，恢复空闲状态
+                        game.LaunchStatusMessage = string.Empty;
                         StatusChanged?.Invoke(this, new GameStatusInfo
                         {
                             Status = GameRunStatus.Idle,
@@ -186,6 +197,7 @@ public class GameService
                 // 清空存档目录
                 if (Directory.Exists(game.ResolvedSaveFolderPath))
                 {
+                    game.LaunchStatusMessage = "正在清空存档目录...";
                     StatusChanged?.Invoke(this, new GameStatusInfo
                     {
                         Status = GameRunStatus.Launching,
@@ -198,6 +210,7 @@ public class GameService
                 }
 
                 // 解压存档
+                game.LaunchStatusMessage = "正在解压存档...";
                 StatusChanged?.Invoke(this, new GameStatusInfo
                 {
                     Status = GameRunStatus.Launching,
@@ -209,6 +222,7 @@ public class GameService
                 await TarHelper.ExtractTarAsync(latestExitSave.Path, game.ResolvedSaveFolderPath);
 
                 // 更新进度：解压完成
+                game.LaunchStatusMessage = "存档恢复完成，正在启动游戏...";
                 StatusChanged?.Invoke(this, new GameStatusInfo
                 {
                     Status = GameRunStatus.Launching,
@@ -221,6 +235,7 @@ public class GameService
         }
 
         // 2. 启动游戏进程
+        game.LaunchStatusMessage = "正在启动游戏...";
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Launching,
@@ -237,7 +252,10 @@ public class GameService
         IsGameRunning = true;
         RunningGameId = game.Id;
         RunningProcessId = process.Id;
+        RunningProcessName = process.ProcessName;
         game.IsRunning = true;
+        game.RunningPid = process.Id; // 设置进程 PID 供列表项显示
+        game.LaunchStatusMessage = string.Empty; // 启动完成，清空启动状态消息
 
         // 通知：游戏运行中（启动完成，进度100%）
         StatusChanged?.Invoke(this, new GameStatusInfo
@@ -257,6 +275,7 @@ public class GameService
             IsGameRunning = false;
             RunningGameId = null;
             RunningProcessId = 0;
+            RunningProcessName = null;
 
             // 使用应用主窗口的 DispatcherQueue 回到 UI 线程更新属性
             var dispatcherQueue = App.MainWindow?.DispatcherQueue;
