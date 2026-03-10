@@ -46,6 +46,38 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 启动设置 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE7E8;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                            <TextBlock Text="启动设置" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="设置应用的启动行为" FontSize="13" Foreground="Gray"/>
+                        
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="开机自启动" FontSize="14"/>
+                                <TextBlock Text="开机时自动在后台托盘启动，不显示主窗口" FontSize="12" Foreground="Gray" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            
+                            <ToggleSwitch Grid.Column="1" 
+                                          IsOn="{x:Bind ViewModel.IsAutoStartEnabled, Mode=TwoWay}"
+                                          VerticalAlignment="Center"
+                                          OnContent="" OffContent=""/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- 工作目录设置 -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         CornerRadius="8"

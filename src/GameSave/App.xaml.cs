@@ -67,6 +67,9 @@ namespace GameSave
             // 初始化配置服务（加载主题设置等）
             await ConfigService.InitializeAsync();
 
+            // 检测是否为静默启动模式（开机自启时使用）
+            bool isSilentStart = Services.AutoStartService.IsSilentStart();
+
             m_window = new Window();
             m_window.Title = "GameSave Manager";
 
@@ -81,7 +84,6 @@ namespace GameSave
 
             m_window.Content = rootFrame;
             rootFrame.Navigate(typeof(Views.MainPage), e.Arguments);
-            m_window.Activate();
 
             // 应用已保存的主题设置
             ApplyTheme(ConfigService.ThemeMode);
@@ -90,6 +92,19 @@ namespace GameSave
             // 仅在发布模式下启用系统托盘（开发环境下关闭窗口直接退出，方便调试）
             InitializeTrayIcon();
             m_window.Closed += MainWindow_Closed;
+
+            if (isSilentStart)
+            {
+                // 静默模式：先激活窗口确保 XAML 初始化完成，然后立即隐藏到托盘
+                m_window.Activate();
+                HideMainWindow();
+            }
+            else
+            {
+                m_window.Activate();
+            }
+#else
+            m_window.Activate();
 #endif
         }
 

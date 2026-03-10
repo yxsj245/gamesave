@@ -71,6 +71,56 @@ public partial class SettingsViewModel : BaseViewModel
 
     #endregion
 
+    #region 开机自启动
+
+    /// <summary>
+    /// 是否启用开机自启动
+    /// </summary>
+    private bool _isAutoStartEnabled;
+    public bool IsAutoStartEnabled
+    {
+        get => _isAutoStartEnabled;
+        set
+        {
+            if (SetProperty(ref _isAutoStartEnabled, value))
+            {
+                _ = ToggleAutoStartAsync(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 自启动操作结果提示
+    /// </summary>
+    private string _autoStartStatusMessage = string.Empty;
+    public string AutoStartStatusMessage
+    {
+        get => _autoStartStatusMessage;
+        set => SetProperty(ref _autoStartStatusMessage, value);
+    }
+
+    /// <summary>
+    /// 切换开机自启动
+    /// </summary>
+    private async Task ToggleAutoStartAsync(bool enabled)
+    {
+        var success = AutoStartService.SetAutoStart(enabled);
+        if (success)
+        {
+            await _configService.SetAutoStartAsync(enabled);
+            AutoStartStatusMessage = string.Empty;
+        }
+        else
+        {
+            // 操作失败，回滚 UI 状态
+            _isAutoStartEnabled = !enabled;
+            OnPropertyChanged(nameof(IsAutoStartEnabled));
+            AutoStartStatusMessage = "操作失败，请检查系统权限";
+        }
+    }
+
+    #endregion
+
     #region 工作目录
 
     private string _workDirectory = string.Empty;
@@ -91,6 +141,10 @@ public partial class SettingsViewModel : BaseViewModel
         // 加载当前主题设置（直接设置字段避免触发 setter 中的保存操作）
         _selectedThemeIndex = ThemeModeToIndex(_configService.ThemeMode);
         OnPropertyChanged(nameof(SelectedThemeIndex));
+
+        // 加载开机自启动状态（以注册表实际状态为准）
+        _isAutoStartEnabled = AutoStartService.IsAutoStartEnabled();
+        OnPropertyChanged(nameof(IsAutoStartEnabled));
     }
 
     /// <summary>

@@ -22,6 +22,9 @@ public class AppConfig
     /// 默认跟随系统
     /// </summary>
     public string ThemeMode { get; set; } = "System";
+
+    /// <summary>是否开机自启动</summary>
+    public bool AutoStart { get; set; } = false;
 }
 
 /// <summary>
@@ -45,12 +48,24 @@ public class ConfigService
     /// <summary>当前主题模式</summary>
     public string ThemeMode => _config.ThemeMode;
 
+    /// <summary>是否开机自启动</summary>
+    public bool AutoStart => _config.AutoStart;
+
     /// <summary>
     /// 设置主题模式并保存配置
     /// </summary>
     public async Task SetThemeModeAsync(string themeMode)
     {
         _config.ThemeMode = themeMode;
+        await SaveConfigAsync();
+    }
+
+    /// <summary>
+    /// 设置开机自启动并保存配置
+    /// </summary>
+    public async Task SetAutoStartAsync(bool autoStart)
+    {
+        _config.AutoStart = autoStart;
         await SaveConfigAsync();
     }
 
