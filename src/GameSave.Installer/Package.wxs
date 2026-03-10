@@ -33,6 +33,18 @@
         <Icon Id="AppIcon.ico" SourceFile="$(IconPath)" />
         <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
+        <!-- 安装前检测 GameSave.exe 是否正在运行 -->
+        <Property Id="GAMESAVERUNNING" Value="0" />
+        <CustomAction Id="CheckGameSaveRunning" Script="vbscript" ScriptSourceFile="CheckProcess.vbs" Execute="immediate" Return="check" />
+        <InstallUISequence>
+            <Custom Action="CheckGameSaveRunning" Before="LaunchConditions" />
+        </InstallUISequence>
+        <InstallExecuteSequence>
+            <Custom Action="CheckGameSaveRunning" Before="LaunchConditions" />
+        </InstallExecuteSequence>
+        <Launch Condition='GAMESAVERUNNING = "0"' 
+                Message="GameSave Manager 正在运行中，请先从系统托盘右键点击图标选择「退出」后再安装。" />
+
         <!-- 安装目录结构 -->
         <StandardDirectory Id="LocalAppDataFolder">
             <Directory Id="CompanyDir" Name="GameSave">

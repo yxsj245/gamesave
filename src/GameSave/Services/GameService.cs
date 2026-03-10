@@ -59,6 +59,9 @@ public class GameService
     /// <summary>检测到游戏崩溃或未成功启动时触发的事件（参数为游戏名称）</summary>
     public event EventHandler<string>? GameCrashDetected;
 
+    /// <summary>自动备份失败时触发的事件（参数为游戏名称和错误信息）</summary>
+    public event EventHandler<(string GameName, string ErrorMessage)>? BackupFailed;
+
     /// <summary>当前是否有游戏正在运行</summary>
     public bool IsGameRunning { get; private set; }
 
@@ -349,6 +352,7 @@ public class GameService
 
             // 进程退出后自动备份
             SaveFile? save = null;
+            string? backupError = null;
             try
             {
                 if (Directory.Exists(game.ResolvedSaveFolderPath) &&
@@ -373,6 +377,7 @@ public class GameService
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"自动备份失败: {ex.Message}");
+                backupError = ex.Message;
             }
 
             // 备份完成后，检测是否需要上传到云端
@@ -382,24 +387,41 @@ public class GameService
                 uploaded = await TryUploadToCloudAsync(game, save);
             }
 
-            // 如果没有上传到云端，则手动发送完成状态
+            // 如果没有上传到云端，则手动发送完成/失败状态
             if (!uploaded)
             {
-                StatusChanged?.Invoke(this, new GameStatusInfo
+                if (backupError != null)
                 {
-                    Status = GameRunStatus.Completed,
-                    GameName = game.Name,
-                    GameId = game.Id,
-                    Message = $"游戏 {game.Name} 存档备份完成"
-                });
+                    // 备份失败 — 发送 Idle 状态（不会触发成功通知）
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Idle,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"游戏 {game.Name} 存档备份失败: {backupError}"
+                    });
 
-                // 短暂延迟后恢复空闲
-                await Task.Delay(3000);
-                StatusChanged?.Invoke(this, new GameStatusInfo
+                    // 触发备份失败的通知（通过 GameCrashDetected 不合适，新增专用事件）
+                    BackupFailed?.Invoke(this, (game.Name, backupError));
+                }
+                else
                 {
-                    Status = GameRunStatus.Idle,
-                    Message = "同步就绪"
-                });
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Completed,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"游戏 {game.Name} 存档备份完成"
+                    });
+
+                    // 短暂延迟后恢复空闲
+                    await Task.Delay(3000);
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Idle,
+                        Message = "同步就绪"
+                    });
+                }
             }
 
             GameExited?.Invoke(this, game.Id);

@@ -132,7 +132,12 @@ namespace GameSave.Views
                     }
 
                     var (success, message) = await ViewModel.LaunchGameDirectAsync(game);
-                    if (!success)
+                    if (success)
+                    {
+                        // 启动成功，隐藏到系统托盘并发送通知
+                        App.HideToTrayForGame(game.Name);
+                    }
+                    else
                     {
                         await ShowMessageAsync("启动失败", message);
                     }
@@ -832,12 +837,13 @@ namespace GameSave.Views
                 return;
             }
 
+            var gameName = ViewModel.SelectedGame.Name;
             var (success, message) = await ViewModel.LaunchGameAsync();
             if (success)
             {
-                // 关闭详情面板，最小化窗口
+                // 关闭详情面板，隐藏到系统托盘并发送通知
                 ViewModel.CloseDetails();
-                MainPage.MinimizeWindow();
+                App.HideToTrayForGame(gameName);
             }
             else
             {
@@ -1186,12 +1192,13 @@ namespace GameSave.Views
                 return;
             }
 
+            var gameName = game.Name;
             ViewModel.SelectedGame = game;
             var (success, message) = await ViewModel.LaunchGameAsync();
             if (success)
             {
                 ViewModel.CloseDetails();
-                MainPage.MinimizeWindow();
+                App.HideToTrayForGame(gameName);
             }
             else
             {

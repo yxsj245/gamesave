@@ -135,8 +135,7 @@ namespace GameSave.Views
                         StatusNavItem.Content = "正在备份...";
                         StatusIcon.Glyph = "\uE898";
 
-                        // 恢复窗口显示
-                        RestoreWindow();
+                        // 游戏退出后备份时不再恢复窗口，保持后台运行
                         break;
 
                     case GameRunStatus.Restoring:

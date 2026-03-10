@@ -32,6 +32,11 @@ namespace GameSave
         /// </summary>
         private bool _firstMinimizeToTray = true;
 
+        /// <summary>
+        /// 标记当前是否有通过应用启动的游戏正在运行（用于判断是否发送托盘通知）
+        /// </summary>
+        private bool _gameLaunchedViaApp = false;
+
         // 全局服务实例
         public static ConfigService ConfigService { get; } = new();
         public static ProcessMonitorService ProcessMonitorService { get; } = new();
@@ -92,6 +97,9 @@ namespace GameSave
             // 仅在发布模式下启用系统托盘（开发环境下关闭窗口直接退出，方便调试）
             InitializeTrayIcon();
             m_window.Closed += MainWindow_Closed;
+
+            // 订阅游戏状态变更事件，用于在游戏退出后通过系统托盘通知用户备份结果
+            SubscribeGameStatusForTrayNotification();
 
             if (isSilentStart)
             {
@@ -187,6 +195,87 @@ namespace GameSave
 
             // 关闭主窗口并退出应用
             m_window?.Close();
+        }
+
+        /// <summary>
+        /// 订阅游戏状态变更事件，在游戏退出后通过系统托盘通知用户备份结果
+        /// 不再恢复窗口，改为全程后台运行 + 托盘通知
+        /// </summary>
+        private void SubscribeGameStatusForTrayNotification()
+        {
+            GameService.StatusChanged += (_, e) =>
+            {
+                // 只处理通过应用启动的游戏的状态变更
+                if (!_gameLaunchedViaApp) return;
+
+                switch (e.Status)
+                {
+                    case Services.GameRunStatus.Completed:
+                        // 备份完成，发送成功通知
+                        _trayIcon?.ShowBalloonTip("✅ 存档备份成功",
+                            $"「{e.GameName}」的存档已备份完成。");
+                        break;
+
+                    case Services.GameRunStatus.Idle:
+                        // 恢复空闲状态，重置标记
+                        _gameLaunchedViaApp = false;
+                        break;
+                }
+            };
+
+            // 订阅崩溃检测事件
+            GameService.GameCrashDetected += (_, gameName) =>
+            {
+                if (!_gameLaunchedViaApp) return;
+
+                _trayIcon?.ShowBalloonTip("⚠️ 游戏异常退出",
+                    $"检测到「{gameName}」异常退出或未成功启动，本次不备份存档。");
+                _gameLaunchedViaApp = false;
+            };
+
+            // 订阅备份失败事件
+            GameService.BackupFailed += (_, args) =>
+            {
+                if (!_gameLaunchedViaApp) return;
+
+                _trayIcon?.ShowBalloonTip("❌ 存档备份失败",
+                    $"「{args.GameName}」的存档备份失败：{args.ErrorMessage}");
+                _gameLaunchedViaApp = false;
+            };
+        }
+
+        /// <summary>
+        /// 启动游戏后隐藏窗口到系统托盘并发送通知
+        /// 供 HomePage 等页面在启动游戏成功后调用
+        /// DEBUG 模式下无托盘图标，回退为最小化窗口
+        /// </summary>
+        /// <param name="gameName">启动的游戏名称</param>
+        public static void HideToTrayForGame(string gameName)
+        {
+            var app = (App)Current;
+            app._gameLaunchedViaApp = true;
+
+            if (app._trayIcon != null)
+            {
+                // 发布模式：隐藏到系统托盘并发送通知
+                app.HideMainWindow();
+                app._trayIcon.ShowBalloonTip("🎮 游戏已启动",
+                    $"「{gameName}」已启动，程序已进入后台运行。\n游戏退出后将自动备份存档并通知您。");
+            }
+            else
+            {
+                // 开发模式：无托盘图标，最小化窗口（避免隐藏后无法恢复）
+                Views.MainPage.MinimizeWindow();
+            }
+        }
+
+        /// <summary>
+        /// 发送系统托盘通知（公共方法，供其他模块调用）
+        /// </summary>
+        public static void ShowTrayNotification(string title, string message)
+        {
+            var app = (App)Current;
+            app._trayIcon?.ShowBalloonTip(title, message);
         }
 
         /// <summary>获取当前主窗口（用于弹出文件选择器等）</summary>
