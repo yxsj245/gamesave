@@ -8,6 +8,9 @@ namespace GameSave.Views
     /// </summary>
     public partial class SettingsPage : Page
     {
+        /// <summary>标记是否正在加载设置（避免触发 Toggled 事件）</summary>
+        private bool _isLoadingSettings;
+
         public SettingsPage()
         {
             this.InitializeComponent();
@@ -17,8 +20,60 @@ namespace GameSave.Views
 
         private void Page_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
+            _isLoadingSettings = true;
             ViewModel.LoadSettings();
+            _isLoadingSettings = false;
             UpdateNoConfigHint();
+        }
+
+        /// <summary>
+        /// 主题 RadioButtons 加载完成 — 设置选中索引
+        /// </summary>
+        private void ThemeRadioButtons_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Microsoft.UI.Xaml.Controls.RadioButtons radioButtons)
+            {
+                _isLoadingSettings = true;
+                radioButtons.SelectedIndex = ViewModel.SelectedThemeIndex;
+                _isLoadingSettings = false;
+            }
+        }
+
+        /// <summary>
+        /// 主题 RadioButtons 选择变更
+        /// </summary>
+        private void ThemeRadioButtons_SelectionChanged(object sender, Microsoft.UI.Xaml.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isLoadingSettings) return;
+            if (sender is Microsoft.UI.Xaml.Controls.RadioButtons radioButtons)
+            {
+                ViewModel.SelectedThemeIndex = radioButtons.SelectedIndex;
+            }
+        }
+
+        /// <summary>
+        /// 开机自启动开关加载完成 — 设置初始状态
+        /// </summary>
+        private void AutoStartToggle_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Microsoft.UI.Xaml.Controls.ToggleSwitch toggle)
+            {
+                _isLoadingSettings = true;
+                toggle.IsOn = ViewModel.IsAutoStartEnabled;
+                _isLoadingSettings = false;
+            }
+        }
+
+        /// <summary>
+        /// 开机自启动开关切换事件
+        /// </summary>
+        private void AutoStartToggle_Toggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (_isLoadingSettings) return;
+            if (sender is Microsoft.UI.Xaml.Controls.ToggleSwitch toggle)
+            {
+                ViewModel.IsAutoStartEnabled = toggle.IsOn;
+            }
         }
 
         /// <summary>

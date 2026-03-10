@@ -36,9 +36,9 @@
                         </StackPanel>
                         <TextBlock Text="选择应用的显示主题" FontSize="13" Foreground="Gray"/>
                         
-                        <RadioButtons x:Name="ThemeRadioButtons"
-                                      SelectedIndex="{x:Bind ViewModel.SelectedThemeIndex, Mode=TwoWay}"
-                                      MaxColumns="3">
+                        <RadioButtons MaxColumns="3"
+                                      Loaded="ThemeRadioButtons_Loaded"
+                                      SelectionChanged="ThemeRadioButtons_SelectionChanged">
                             <RadioButton Content="跟随系统" Tag="System"/>
                             <RadioButton Content="浅色模式" Tag="Light"/>
                             <RadioButton Content="深色模式" Tag="Dark"/>
@@ -71,8 +71,9 @@
                             </StackPanel>
                             
                             <ToggleSwitch Grid.Column="1" 
-                                          IsOn="{x:Bind ViewModel.IsAutoStartEnabled, Mode=TwoWay}"
                                           VerticalAlignment="Center"
+                                          Loaded="AutoStartToggle_Loaded"
+                                          Toggled="AutoStartToggle_Toggled"
                                           OnContent="" OffContent=""/>
                         </Grid>
                     </StackPanel>
