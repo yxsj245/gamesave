@@ -25,10 +25,127 @@ namespace GameSave.Views
             App.GameService.StatusChanged += GameService_StatusChanged;
         }
 
-        private void Page_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        private async void Page_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
             // 默认导航到主页
             ContentFrame.Navigate(typeof(HomePage));
+
+            // 检查是否需要显示首次使用欢迎弹窗
+            await ShowWelcomeDialogIfFirstLaunchAsync();
+        }
+
+        /// <summary>
+        /// 首次使用时显示欢迎弹窗
+        /// </summary>
+        private async Task ShowWelcomeDialogIfFirstLaunchAsync()
+        {
+            if (App.ConfigService.HasShownWelcome)
+                return;
+
+            var dialog = new ContentDialog
+            {
+                Title = "欢迎使用 GSAM 游戏存档管理器（公测）",
+                XamlRoot = this.XamlRoot,
+                RequestedTheme = App.GetCurrentTheme(),
+                PrimaryButtonText = "我知道了",
+                DefaultButton = ContentDialogButton.Primary
+            };
+
+            // 构建弹窗内容
+            var contentPanel = new StackPanel { Spacing = 12 };
+
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = "📢 公测须知",
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold
+            });
+
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = "当前版本为公开测试版本，所有功能和界面均不代表最终效果。我们正在积极开发和优化中，部分功能可能存在不完善之处，敬请谅解。",
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray)
+            });
+
+            // 分隔线
+            contentPanel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Thickness(0, 4, 0, 4)
+            });
+
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = "💬 交流与反馈",
+                FontSize = 16,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = "公测期间欢迎各位大佬提出宝贵的意见和建议，你们的建议将直接决定后续功能的走向！",
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            // QQ 联系方式
+            var qqPanel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 4, 0, 0) };
+
+            var qqPersonal = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            qqPersonal.Children.Add(new FontIcon
+            {
+                Glyph = "\uE77B",
+                FontSize = 14,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.DodgerBlue)
+            });
+            qqPersonal.Children.Add(new TextBlock
+            {
+                Text = "QQ：3354416548",
+                IsTextSelectionEnabled = true,
+                FontSize = 14
+            });
+            qqPanel.Children.Add(qqPersonal);
+
+            var qqGroup = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            qqGroup.Children.Add(new FontIcon
+            {
+                Glyph = "\uE716",
+                FontSize = 14,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.MediumPurple)
+            });
+            qqGroup.Children.Add(new TextBlock
+            {
+                Text = "QQ群：1053482216",
+                IsTextSelectionEnabled = true,
+                FontSize = 14
+            });
+            qqPanel.Children.Add(qqGroup);
+
+            contentPanel.Children.Add(qqPanel);
+
+            // 底部感谢文字
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = "感谢您的使用与支持！🎮",
+                FontSize = 13,
+                Margin = new Thickness(0, 8, 0, 0),
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            dialog.Content = contentPanel;
+
+            await dialog.ShowAsync();
+
+            // 标记已显示欢迎弹窗
+            await App.ConfigService.SetHasShownWelcomeAsync();
         }
 
         private void NavView_PaneOpening(NavigationView sender, object args)

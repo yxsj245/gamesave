@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameSave Manager - 你的存档，由你掌控</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;600;700;900&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ==================== 基础重置与设计令牌 ==================== */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --c-bg: #0a0a12;
+            --c-bg-card: rgba(255, 255, 255, 0.04);
+            --c-bg-card-hover: rgba(255, 255, 255, 0.08);
+            --c-text: #e8e8f0;
+            --c-text-dim: #9898b0;
+            --c-accent: #7c5cfc;
+            --c-accent2: #5cb8fc;
+            --c-green: #34d399;
+            --c-red: #f87171;
+            --c-orange: #fb923c;
+            --c-pink: #f472b6;
+            --radius: 16px;
+            --glass: rgba(255, 255, 255, 0.06);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --gradient-hero: linear-gradient(135deg, #7c5cfc 0%, #5cb8fc 50%, #34d399 100%);
+            --gradient-card: linear-gradient(135deg, rgba(124, 92, 252, 0.15), rgba(92, 184, 252, 0.08));
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+            background: var(--c-bg);
+            color: var(--c-text);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* ==================== 背景动效 ==================== */
+        .bg-orbs {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .bg-orbs .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: .25;
+            animation: orbFloat 20s ease-in-out infinite alternate;
+        }
+
+        .bg-orbs .orb:nth-child(1) {
+            width: 600px;
+            height: 600px;
+            background: #7c5cfc;
+            top: -10%;
+            left: -8%;
+            animation-delay: 0s;
+        }
+
+        .bg-orbs .orb:nth-child(2) {
+            width: 500px;
+            height: 500px;
+            background: #5cb8fc;
+            top: 30%;
+            right: -10%;
+            animation-delay: -5s;
+        }
+
+        .bg-orbs .orb:nth-child(3) {
+            width: 450px;
+            height: 450px;
+            background: #34d399;
+            bottom: -5%;
+            left: 20%;
+            animation-delay: -10s;
+        }
+
+        .bg-orbs .orb:nth-child(4) {
+            width: 350px;
+            height: 350px;
+            background: #f472b6;
+            top: 60%;
+            left: 50%;
+            animation-delay: -15s;
+        }
+
+        @keyframes orbFloat {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(40px, -30px) scale(1.1);
+            }
+
+            100% {
+                transform: translate(-20px, 20px) scale(0.95);
+            }
+        }
+
+        /* ==================== 布局容器 ==================== */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ==================== 导航栏 ==================== */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(10, 10, 18, 0.75);
+            backdrop-filter: blur(20px) saturate(1.4);
+            border-bottom: 1px solid var(--glass-border);
+            transition: background .3s;
+        }
+
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 1.15rem;
+            text-decoration: none;
+            color: var(--c-text);
+        }
+
+        .nav-logo img {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 28px;
+        }
+
+        .nav-links a {
+            color: var(--c-text-dim);
+            text-decoration: none;
+            font-size: .88rem;
+            font-weight: 500;
+            transition: color .25s;
+        }
+
+        .nav-links a:hover {
+            color: var(--c-text);
+        }
+
+        .nav-btn {
+            padding: 8px 22px;
+            border-radius: 10px;
+            font-size: .85rem;
+            font-weight: 600;
+            background: var(--gradient-hero);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform .2s, box-shadow .3s;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 24px rgba(124, 92, 252, 0.4);
+        }
+
+        /* ==================== 英雄区 ==================== */
+        .hero {
+            padding: 160px 0 100px;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            border-radius: 100px;
+            font-size: .82rem;
+            font-weight: 600;
+            background: rgba(124, 92, 252, 0.15);
+            color: var(--c-accent);
+            border: 1px solid rgba(124, 92, 252, 0.3);
+            margin-bottom: 28px;
+            animation: fadeUp .8s ease both;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.2rem, 5vw, 3.8rem);
+            font-weight: 900;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+            margin-bottom: 20px;
+            animation: fadeUp .8s ease .15s both;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--c-text-dim);
+            max-width: 640px;
+            margin: 0 auto 40px;
+            animation: fadeUp .8s ease .3s both;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeUp .8s ease .45s both;
+        }
+
+        .btn-primary {
+            padding: 14px 36px;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 700;
+            background: var(--gradient-hero);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform .2s, box-shadow .3s;
+            box-shadow: 0 4px 20px rgba(124, 92, 252, 0.35);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(124, 92, 252, 0.5);
+        }
+
+        .btn-secondary {
+            padding: 14px 36px;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: var(--glass);
+            color: var(--c-text);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background .25s, transform .2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--c-bg-card-hover);
+            transform: translateY(-2px);
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 48px;
+            justify-content: center;
+            margin-top: 56px;
+            animation: fadeUp .8s ease .6s both;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-num {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-label {
+            font-size: .82rem;
+            color: var(--c-text-dim);
+            margin-top: 4px;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(28px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ==================== 通用标题 ==================== */
+        .section {
+            padding: 100px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-header h2 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 14px;
+        }
+
+        .section-header h2 .gradient {
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .section-header p {
+            color: var(--c-text-dim);
+            max-width: 560px;
+            margin: 0 auto;
+        }
+
+        /* ==================== 功能卡片网格 ==================== */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: var(--c-bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: all .35s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--gradient-card);
+            opacity: 0;
+            transition: opacity .35s;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(124, 92, 252, 0.35);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(124, 92, 252, 0.12);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-card>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 18px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            font-size: .92rem;
+            color: var(--c-text-dim);
+            line-height: 1.65;
+        }
+
+        .icon-blue {
+            background: rgba(92, 184, 252, 0.15);
+        }
+
+        .icon-purple {
+            background: rgba(124, 92, 252, 0.15);
+        }
+
+        .icon-green {
+            background: rgba(52, 211, 153, 0.15);
+        }
+
+        .icon-pink {
+            background: rgba(244, 114, 182, 0.15);
+        }
+
+        .icon-orange {
+            background: rgba(251, 146, 60, 0.15);
+        }
+
+        .icon-red {
+            background: rgba(248, 113, 113, 0.15);
+        }
+
+        /* ==================== 技术对比 ==================== */
+        .compare-table-wrap {
+            background: var(--c-bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .compare-table th,
+        .compare-table td {
+            padding: 18px 24px;
+            text-align: left;
+            font-size: .92rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .compare-table thead th {
+            font-weight: 700;
+            font-size: .95rem;
+            background: rgba(124, 92, 252, 0.08);
+        }
+
+        .compare-table thead th:first-child {
+            color: var(--c-text-dim);
+        }
+
+        .compare-table thead th:nth-child(2) {
+            background: rgba(124, 92, 252, 0.18);
+            color: var(--c-accent);
+        }
+
+        .compare-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .compare-table td:first-child {
+            color: var(--c-text-dim);
+            font-weight: 500;
+        }
+
+        .compare-table td:nth-child(2) {
+            font-weight: 600;
+        }
+
+        .check {
+            color: var(--c-green);
+            font-weight: 700;
+        }
+
+        .cross {
+            color: var(--c-red);
+            opacity: .6;
+        }
+
+        .tag-win {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 6px;
+            font-size: .78rem;
+            font-weight: 600;
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--c-green);
+        }
+
+        /* ==================== 技术栈展示 ==================== */
+        .tech-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .tech-card {
+            background: var(--c-bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            padding: 28px;
+            text-align: center;
+            transition: all .3s;
+        }
+
+        .tech-card:hover {
+            border-color: rgba(124, 92, 252, 0.3);
+            transform: translateY(-3px);
+        }
+
+        .tech-card .emoji {
+            font-size: 2.5rem;
+            margin-bottom: 14px;
+            display: block;
+        }
+
+        .tech-card h4 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .tech-card p {
+            font-size: .82rem;
+            color: var(--c-text-dim);
+        }
+
+        /* ==================== 流程时间线 ==================== */
+        .timeline {
+            position: relative;
+            padding-left: 48px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 18px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, var(--c-accent), var(--c-accent2), var(--c-green));
+            border-radius: 2px;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 36px;
+        }
+
+        .timeline-dot {
+            position: absolute;
+            left: -38px;
+            top: 4px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 3px solid var(--c-accent);
+            background: var(--c-bg);
+        }
+
+        .timeline-item h4 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .timeline-item p {
+            font-size: .9rem;
+            color: var(--c-text-dim);
+        }
+
+        /* ==================== 开源许可对比 ==================== */
+        .license-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .license-card {
+            background: var(--c-bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: center;
+            transition: all .3s;
+        }
+
+        .license-card.highlight {
+            border-color: rgba(52, 211, 153, 0.4);
+            background: rgba(52, 211, 153, 0.05);
+        }
+
+        .license-card h4 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .license-card .badge {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 8px;
+            font-size: .78rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .badge-green {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--c-green);
+        }
+
+        .badge-red {
+            background: rgba(248, 113, 113, 0.15);
+            color: var(--c-red);
+        }
+
+        .license-card ul {
+            list-style: none;
+            text-align: left;
+        }
+
+        .license-card li {
+            padding: 6px 0;
+            font-size: .88rem;
+            color: var(--c-text-dim);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .license-card li::before {
+            flex-shrink: 0;
+        }
+
+        /* ==================== CTA ==================== */
+        .cta {
+            text-align: center;
+            padding: 80px 0 120px;
+        }
+
+        .cta-box {
+            background: var(--gradient-card);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 64px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 0%, rgba(124, 92, 252, 0.2), transparent 70%);
+        }
+
+        .cta-box>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-box h2 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 14px;
+        }
+
+        .cta-box p {
+            color: var(--c-text-dim);
+            margin-bottom: 32px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ==================== Footer ==================== */
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            font-size: .8rem;
+            color: var(--c-text-dim);
+            border-top: 1px solid var(--glass-border);
+        }
+
+        /* ==================== 滚动动画 ==================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all .7s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ==================== 响应式 ==================== */
+        @media (max-width: 768px) {
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-stats {
+                gap: 24px;
+                flex-wrap: wrap;
+            }
+
+            .license-compare {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .compare-table th,
+            .compare-table td {
+                padding: 12px 14px;
+                font-size: .82rem;
+            }
+
+            .tech-cards {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-orbs">
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+
+    <!-- ==================== 导航 ==================== -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a class="nav-logo" href="#">
+                <img src="../logo.png" alt="GSAM">
+                <span>GameSave Manager</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">功能特色</a>
+                <a href="#compare">技术对比</a>
+                <a href="#tech">技术架构</a>
+                <a href="#lifecycle">存档生命周期</a>
+                <a href="#opensource">开源协议</a>
+            </div>
+            <a class="nav-btn" href="https://github.com/yxsj245/gamesave/releases" target="_blank">⬇ 下载</a>
+        </div>
+    </nav>
+
+    <!-- ==================== 英雄区 ==================== -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-badge">🎮 Windows 原生 · WinUI 3 · .NET 10</div>
+            <h1>你的游戏存档<br>由你掌控</h1>
+            <p>基于 WinUI 3 构建的全新游戏存档管理器。从启动到退出，全生命周期守护你的每一份游戏进度，再也不用担心 Steam 云存档翻车。</p>
+            <div class="hero-actions">
+                <a class="btn-primary" href="https://github.com/yxsj245/gamesave/releases" target="_blank">立即下载</a>
+                <a class="btn-secondary" href="https://github.com/yxsj245/gamesave" target="_blank">⭐ GitHub 源码</a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-num">6+</div>
+                    <div class="stat-label">平台游戏导入</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-num">4 种</div>
+                    <div class="stat-label">备份模式</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-num">☁️</div>
+                    <div class="stat-label">云端跨设备同步</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-num">MIT</div>
+                    <div class="stat-label">最宽松开源协议</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 功能特色 ==================== -->
+    <section class="section" id="features">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>强大的 <span class="gradient">功能特色</span></h2>
+                <p>全方位守护你的游戏存档，从手动备份到云端同步一应俱全</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-purple">🔄</div>
+                    <h3>全生命周期自动备份</h3>
+                    <p>从启动游戏到退出游戏，自动完成存档备份。支持 Steam Stub 进程检测，告别云存档出错导致的存档损坏问题。</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-blue">🎯</div>
+                    <h3>一键导入平台游戏</h3>
+                    <p>支持 Steam、Epic、GOG、Ubisoft、EA、Battle.net 六大平台游戏一键自动导入，无需手动查找存档路径，快速上手。</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-green">💾</div>
+                    <h3>热备份 · 随时备份</h3>
+                    <p>全面支持热备份技术，即使在游戏运行中也能安全备份存档。任何时刻，只要你想，一键即可保存关键进度。</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-orange">⏱️</div>
+                    <h3>智能定时备份</h3>
+                    <p>两种定时模式：设定了游戏进程则跟随游戏生命周期自动启停；未设定则手动控制开关。自动轮转管理历史备份。</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-pink">☁️</div>
+                    <h3>云端备份 · 跨设备同步</h3>
+                    <p>本地备份完毕后自动上传到云端（阿里云 OSS）。换电脑、硬盘损坏？从云端一键恢复，跨设备存档互通。</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon icon-red">🖥️</div>
+                    <h3>系统深度集成</h3>
+                    <p>系统托盘后台运行、游戏退出后系统通知告知备份结果、支持开机自启动静默模式。全程零干扰。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 技术对比 ==================== -->
+    <section class="section" id="compare" style="background: rgba(124,92,252,0.02);">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2><span class="gradient">技术架构</span> 全面对比</h2>
+                <p>与市面上基于 Electron 的友商方案相比，GSAM 在各方面实现了质的飞跃</p>
+            </div>
+            <div class="compare-table-wrap reveal">
+                <table class="compare-table">
+                    <thead>
+                        <tr>
+                            <th>对比维度</th>
+                            <th>🏆 GSAM (本项目)</th>
+                            <th>友商 (Electron)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>开发语言</td>
+                            <td>C# <span class="tag-win">原生编译</span></td>
+                            <td>JavaScript (Node.js)</td>
+                        </tr>
+                        <tr>
+                            <td>UI 框架</td>
+                            <td>WinUI 3 <span class="tag-win">Windows 原生</span></td>
+                            <td>Electron (Chromium 内核)</td>
+                        </tr>
+                        <tr>
+                            <td>运行时</td>
+                            <td>.NET 10 AOT</td>
+                            <td>Node.js + Chromium</td>
+                        </tr>
+                        <tr>
+                            <td>空闲内存占用</td>
+                            <td>~30-50 MB <span class="tag-win">极低</span></td>
+                            <td>~200-400 MB</td>
+                        </tr>
+                        <tr>
+                            <td>安装包体积</td>
+                            <td>~20 MB (MSI)</td>
+                            <td>~150 MB+</td>
+                        </tr>
+                        <tr>
+                            <td>启动速度</td>
+                            <td><span class="check">⚡ 秒开</span></td>
+                            <td>需加载 Chromium引擎</td>
+                        </tr>
+                        <tr>
+                            <td>全生命周期备份</td>
+                            <td><span class="check">✓ 支持</span></td>
+                            <td><span class="cross">✗ 不支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>热备份（游戏中备份）</td>
+                            <td><span class="check">✓ 全面支持</span></td>
+                            <td><span class="cross">✗ 不支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>智能定时备份</td>
+                            <td><span class="check">✓ 跟随进程生命周期</span></td>
+                            <td><span class="cross">✗ 不支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>云端同步</td>
+                            <td><span class="check">✓ 阿里云 OSS</span></td>
+                            <td><span class="cross">✗ 不支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>开源协议</td>
+                            <td><span class="check">MIT (最宽松)</span></td>
+                            <td>GPL-3.0 (严格限制)</td>
+                        </tr>
+                        <tr>
+                            <td>代码混淆</td>
+                            <td>无 (完全透明)</td>
+                            <td>webpack-obfuscator 混淆</td>
+                        </tr>
+                        <tr>
+                            <td>Steam Stub 进程检测</td>
+                            <td><span class="check">✓ 智能检测</span></td>
+                            <td><span class="cross">✗ 不支持</span></td>
+                        </tr>
+                        <tr>
+                            <td>系统通知集成</td>
+                            <td><span class="check">✓ Windows 原生通知</span></td>
+                            <td>Electron 通知</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 技术栈 ==================== -->
+    <section class="section" id="tech">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>原生 <span class="gradient">技术栈</span></h2>
+                <p>采用 Windows 原生技术，低占用高性能，真正为游戏而生</p>
+            </div>
+            <div class="tech-cards">
+                <div class="tech-card reveal">
+                    <span class="emoji">💎</span>
+                    <h4>C# 语言</h4>
+                    <p>微软官方语言，类型安全<br>原生编译性能卓越</p>
+                </div>
+                <div class="tech-card reveal">
+                    <span class="emoji">🪟</span>
+                    <h4>WinUI 3</h4>
+                    <p>Windows 原生 UI 框架<br>Fluent Design 设计语言</p>
+                </div>
+                <div class="tech-card reveal">
+                    <span class="emoji">🚀</span>
+                    <h4>.NET 10</h4>
+                    <p>最新 .NET 运行时<br>支持 AOT 原生编译</p>
+                </div>
+                <div class="tech-card reveal">
+                    <span class="emoji">📐</span>
+                    <h4>MVVM 架构</h4>
+                    <p>CommunityToolkit.Mvvm<br>清晰的分层架构</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 存档生命周期 ==================== -->
+    <section class="section" id="lifecycle" style="background: rgba(92,184,252,0.02);">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>存档 <span class="gradient">全生命周期</span> 保护</h2>
+                <p>从启动到退出，每一步都有备份守护</p>
+            </div>
+            <div class="timeline reveal">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>🎮 启动游戏</h4>
+                    <p>通过 GSAM 启动游戏，自动校验本地退出存档，将最新安全存档恢复到游戏目录</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>🔍 进程智能检测</h4>
+                    <p>自动捕获游戏 PID，支持 Steam Stub 进程跳转检测，精确追踪真实游戏进程</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>⏱️ 定时热备份（可选）</h4>
+                    <p>游戏运行中按设定间隔自动备份，全程热备份无需退出游戏，定时器跟随进程自动启停</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>💾 手动热备份（随时）</h4>
+                    <p>关键进度随时手动保存，游戏运行中也可安全操作，备份数量无限制</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>🛑 游戏退出 · 自动备份</h4>
+                    <p>检测到游戏进程退出后，自动打包存档快照为退出存档，覆盖上一份</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>☁️ 自动上传云端</h4>
+                    <p>备份完成后如已配置云端，自动同步上传。跨设备互通，硬盘坏了也不怕</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <h4>🔔 系统通知</h4>
+                    <p>全程后台运行，备份结果通过 Windows 原生系统通知告知，零干扰体验</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 开源协议 ==================== -->
+    <section class="section" id="opensource">
+        <div class="container">
+            <div class="section-header reveal">
+                <h2>完全 <span class="gradient">开源</span> · 最宽松协议</h2>
+                <p>MIT 协议，自由修改与二次分发，用 AI 二次开发也完全 OK</p>
+            </div>
+            <div class="license-compare reveal">
+                <div class="license-card highlight">
+                    <h4>GSAM</h4>
+                    <div class="badge badge-green">MIT 协议</div>
+                    <ul>
+                        <li>✅ 可自由修改代码</li>
+                        <li>✅ 可商业用途使用</li>
+                        <li>✅ 可二次分发</li>
+                        <li>✅ 仅需保留原作者署名</li>
+                        <li>✅ 无代码混淆，完全透明</li>
+                        <li>✅ 可用 AI 辅助二次开发</li>
+                    </ul>
+                </div>
+                <div class="license-card">
+                    <h4>友商</h4>
+                    <div class="badge badge-red">GPL-3.0 协议</div>
+                    <ul>
+                        <li>⚠️ 修改后必须同样开源</li>
+                        <li>⚠️ 衍生作品须使用 GPL</li>
+                        <li>⚠️ 对商业使用有限制</li>
+                        <li>⚠️ 分发需提供完整源码</li>
+                        <li>❌ 使用 webpack-obfuscator 混淆</li>
+                        <li>❌ 混淆代码不利于贡献</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== CTA ==================== -->
+    <section class="cta">
+        <div class="container">
+            <div class="cta-box reveal">
+                <h2>立即体验 GameSave Manager</h2>
+                <p>开源免费，Windows 原生，低占用高性能。你的存档安全，从现在开始守护。</p>
+                <div class="hero-actions">
+                    <a class="btn-primary" href="https://github.com/yxsj245/gamesave/releases" target="_blank">⬇
+                        下载最新版</a>
+                    <a class="btn-secondary" href="https://github.com/yxsj245/gamesave" target="_blank">查看源码</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>GameSave Manager &copy; 2024-2026 · MIT License · Made with ❤️ for Gamers</p>
+            <p style="margin-top:6px;">QQ 群: 1053482216 · <a href="https://github.com/yxsj245/gamesave"
+                    style="color:var(--c-accent);text-decoration:none;">GitHub</a></p>
+        </div>
+    </footer>
+
+    <script>
+        // 滚动渐显动画
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+    </script>
+</body>
+
+</html>

@@ -25,6 +25,9 @@ public class AppConfig
 
     /// <summary>是否开机自启动</summary>
     public bool AutoStart { get; set; } = false;
+
+    /// <summary>是否已显示过首次使用欢迎弹窗</summary>
+    public bool HasShownWelcome { get; set; } = false;
 }
 
 /// <summary>
@@ -51,12 +54,24 @@ public class ConfigService
     /// <summary>是否开机自启动</summary>
     public bool AutoStart => _config.AutoStart;
 
+    /// <summary>是否已显示过首次使用欢迎弹窗</summary>
+    public bool HasShownWelcome => _config.HasShownWelcome;
+
     /// <summary>
     /// 设置主题模式并保存配置
     /// </summary>
     public async Task SetThemeModeAsync(string themeMode)
     {
         _config.ThemeMode = themeMode;
+        await SaveConfigAsync();
+    }
+
+    /// <summary>
+    /// 标记已显示过欢迎弹窗并保存配置
+    /// </summary>
+    public async Task SetHasShownWelcomeAsync()
+    {
+        _config.HasShownWelcome = true;
         await SaveConfigAsync();
     }
 
