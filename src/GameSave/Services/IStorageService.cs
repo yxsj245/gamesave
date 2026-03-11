@@ -12,7 +12,7 @@ public interface IStorageService
     Task<List<SaveFile>> GetSavesAsync(string gameId);
 
     /// <summary>创建存档备份</summary>
-    Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null);
+    Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null, bool useHotBackup = true);
 
     /// <summary>还原存档备份</summary>
     Task RestoreSaveAsync(SaveFile saveFile, IProgress<double>? progress = null);

@@ -102,10 +102,13 @@ public class GameService
         _configService.GetGameWorkDirectory(game.Id);
 
         // 检测存档目录是否有文件，有则自动初始备份
+        // 添加游戏时游戏必定未在运行中（刚添加），有进程路径的可以用直接模式
+        // 无进程路径的无法判断游戏是否在外部运行，走热备份
         if (Directory.Exists(game.ResolvedSaveFolderPath) &&
             Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
         {
-            await _localStorageService.CreateExitSaveAsync(game);
+            bool needHotBackup = !game.HasProcessPath;
+            await _localStorageService.CreateExitSaveAsync(game, useHotBackup: needHotBackup);
         }
 
         // 保存到配置
@@ -370,7 +373,8 @@ public class GameService
                         });
                     });
 
-                    save = await _localStorageService.CreateExitSaveAsync(game, progress);
+                    // 游戏已退出，使用直接模式打包（无需热备份）
+                    save = await _localStorageService.CreateExitSaveAsync(game, progress, useHotBackup: false);
                     BackupCompleted?.Invoke(this, save);
                 }
             }
@@ -449,7 +453,13 @@ public class GameService
             });
         });
 
-        var save = await _localStorageService.BackupSaveAsync(game, name, null, progress);
+        // 判断是否需要热备份：
+        // - 无进程路径 → 无法判断游戏是否在外部运行，走热备份
+        // - 有进程路径且游戏正在运行 → 热备份（避免文件锁定冲突）
+        // - 有进程路径且游戏未运行 → 直接模式（节省内存）
+        bool needHotBackup = !game.HasProcessPath || ProcessMonitorService.IsProcessRunning(game.ProcessPath);
+
+        var save = await _localStorageService.BackupSaveAsync(game, name, null, progress, needHotBackup);
         BackupCompleted?.Invoke(this, save);
 
         // 通知：本地备份完成
@@ -527,7 +537,8 @@ public class GameService
 
         // 还原成功后，同步更新退出存档
         // 防止下次启动游戏时旧的退出存档覆盖还原后的内容
-        await _localStorageService.CreateExitSaveAsync(game);
+        // 恢复存档时游戏已确认未运行（前面有检查），使用直接模式
+        await _localStorageService.CreateExitSaveAsync(game, useHotBackup: false);
 
         // 通知恢复完成
         StatusChanged?.Invoke(this, new GameStatusInfo

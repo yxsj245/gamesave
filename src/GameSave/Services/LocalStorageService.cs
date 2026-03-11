@@ -64,7 +64,14 @@ public class LocalStorageService : IStorageService
     /// 创建存档备份
     /// 将游戏存档目录打包为 .tar 文件
     /// </summary>
-    public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null)
+    /// <param name="game">游戏信息</param>
+    /// <param name="backupName">备份名称</param>
+    /// <param name="description">备份描述</param>
+    /// <param name="progress">进度报告回调</param>
+    /// <param name="useHotBackup">是否使用热备份模式（先复制到临时快照再打包）。
+    /// true: 适用于游戏运行中或无法确定游戏是否运行的场景，避免文件锁定冲突。
+    /// false: 直接从原目录打包，节省内存和磁盘 I/O，适用于游戏确认未运行的场景。</param>
+    public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null, bool useHotBackup = true)
     {
         if (!Directory.Exists(game.ResolvedSaveFolderPath))
             throw new DirectoryNotFoundException($"游戏存档目录不存在: {game.ResolvedSaveFolderPath}");
@@ -74,31 +81,41 @@ public class LocalStorageService : IStorageService
             throw new InvalidOperationException("存档目录下没有可备份的文件");
 
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
-        var snapshotDir = Path.Combine(gameWorkDir, TempSnapshotDirName);
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var tarFileName = $"{timestamp}_{backupName}.tar";
         var tarFilePath = Path.Combine(gameWorkDir, tarFileName);
 
-        try
+        if (useHotBackup)
         {
-            // 热备份第一步：将游戏存档目录复制到临时快照目录
+            // 热备份模式：先复制到临时快照目录，再打包
             // 使用 FileShare.ReadWrite 模式避免与游戏进程的文件锁定冲突
-            CopyDirectoryRecursive(game.ResolvedSaveFolderPath, snapshotDir);
-
-            // 热备份第二步：对临时快照目录进行 tar 打包
-            await TarHelper.CreateTarAsync(snapshotDir, tarFilePath, progress);
-        }
-        finally
-        {
-            // 热备份第三步：清理临时快照目录
-            if (Directory.Exists(snapshotDir))
+            var snapshotDir = Path.Combine(gameWorkDir, TempSnapshotDirName);
+            try
             {
-                try { Directory.Delete(snapshotDir, true); }
-                catch (Exception ex)
+                // 第一步：将游戏存档目录复制到临时快照目录
+                CopyDirectoryRecursive(game.ResolvedSaveFolderPath, snapshotDir);
+
+                // 第二步：对临时快照目录进行 tar 打包
+                await TarHelper.CreateTarAsync(snapshotDir, tarFilePath, progress);
+            }
+            finally
+            {
+                // 第三步：清理临时快照目录
+                if (Directory.Exists(snapshotDir))
                 {
-                    System.Diagnostics.Debug.WriteLine($"清理临时快照目录失败: {ex.Message}");
+                    try { Directory.Delete(snapshotDir, true); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"清理临时快照目录失败: {ex.Message}");
+                    }
                 }
             }
+        }
+        else
+        {
+            // 直接模式：从原目录直接打包，跳过临时快照复制，节省内存和磁盘 I/O
+            System.Diagnostics.Debug.WriteLine($"[备份] 使用直接模式打包（游戏未运行）: {game.Name}");
+            await TarHelper.CreateTarAsync(game.ResolvedSaveFolderPath, tarFilePath, progress);
         }
 
         var fileInfo = new FileInfo(tarFilePath);
@@ -169,7 +186,10 @@ public class LocalStorageService : IStorageService
     /// <summary>
     /// 创建退出存档（自动覆盖旧的退出存档）
     /// </summary>
-    public async Task<SaveFile> CreateExitSaveAsync(Game game, IProgress<double>? progress = null)
+    /// <param name="game">游戏信息</param>
+    /// <param name="progress">进度报告回调</param>
+    /// <param name="useHotBackup">是否使用热备份模式</param>
+    public async Task<SaveFile> CreateExitSaveAsync(Game game, IProgress<double>? progress = null, bool useHotBackup = true)
     {
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
 
@@ -180,7 +200,7 @@ public class LocalStorageService : IStorageService
         }
 
         // 创建新的退出存档
-        return await BackupSaveAsync(game, "退出存档", "游戏退出后自动备份", progress);
+        return await BackupSaveAsync(game, "退出存档", "游戏退出后自动备份", progress, useHotBackup);
     }
 
     /// <summary>

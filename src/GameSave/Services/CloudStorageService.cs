@@ -159,7 +159,7 @@ public class CloudStorageService : IStorageService
     /// <param name="game">游戏信息</param>
     /// <param name="backupName">备份名称（用于构造文件名）</param>
     /// <param name="description">描述</param>
-    public Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null)
+    public Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null, bool useHotBackup = true)
     {
         // 此方法在云端场景下用于上传：先找本地最新对应名称的存档，再上传
         // 但更推荐使用 UploadSaveFileAsync 直接上传指定的本地存档文件
