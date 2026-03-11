@@ -1,0 +1,501 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="GameSave.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:GameSave.Models"
+    xmlns:helpers="using:GameSave.Helpers"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!-- 游戏详情显示/隐藏动画 -->
+        <Storyboard x:Name="ShowDetailsStoryboard">
+            <DoubleAnimation Storyboard.TargetName="DetailsOverlay" 
+                             Storyboard.TargetProperty="Opacity" 
+                             From="0" To="1" Duration="0:0:0.3">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
+                             Storyboard.TargetProperty="ScaleX" 
+                             From="0.8" To="1" Duration="0:0:0.4">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
+                             Storyboard.TargetProperty="ScaleY" 
+                             From="0.8" To="1" Duration="0:0:0.4">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardTranslate"
+                             Storyboard.TargetProperty="Y"
+                             From="50" To="0" Duration="0:0:0.4">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseOut" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <Storyboard x:Name="HideDetailsStoryboard" Completed="HideDetailsStoryboard_Completed">
+            <DoubleAnimation Storyboard.TargetName="DetailsOverlay" 
+                             Storyboard.TargetProperty="Opacity" 
+                             To="0" Duration="0:0:0.25">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
+                             Storyboard.TargetProperty="ScaleX" 
+                             To="0.95" Duration="0:0:0.25">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardScale" 
+                             Storyboard.TargetProperty="ScaleY" 
+                             To="0.95" Duration="0:0:0.25">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="DetailsCardTranslate"
+                             Storyboard.TargetProperty="Y"
+                             To="20" Duration="0:0:0.25">
+                 <DoubleAnimation.EasingFunction>
+                     <ExponentialEase EasingMode="EaseIn" Exponent="5"/>
+                 </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Page.Resources>
+
+    <Grid Padding="16,0,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /> <!-- 顶部功能区 -->
+            <RowDefinition Height="*" /> <!-- 内容区 -->
+        </Grid.RowDefinitions>
+
+        <!-- 顶端工具栏 -->
+        <CommandBar DefaultLabelPosition="Right"
+                    Background="Transparent"
+                    Grid.Row="0" Margin="0,0,0,12">
+            <AppBarButton Label="添加游戏" Click="AddGame_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE710;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton Label="导入游戏" Click="ImportGames_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE8B5;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+        </CommandBar>
+
+        <!-- 空状态提示 -->
+        <StackPanel Grid.Row="1" 
+                    x:Name="EmptyStatePanel"
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+            <FontIcon Glyph="&#xE7FC;" FontSize="64" Foreground="Gray" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+            <TextBlock Text="还没有添加任何游戏" FontSize="18" Foreground="Gray" HorizontalAlignment="Center"/>
+            <TextBlock Text="点击上方「添加游戏」开始管理你的存档" FontSize="14" Foreground="DarkGray" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
+
+        <!-- 游戏列表 -->
+        <ListView Grid.Row="1"
+                  x:Name="GamesList"
+                  ItemsSource="{x:Bind ViewModel.Games, Mode=OneWay}"
+                  SelectionMode="None"
+                  Tapped="GamesList_Tapped"
+                  HorizontalAlignment="Stretch">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,8" />
+                    <Setter Property="UseSystemFocusVisuals" Value="False" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemContainerTransitions>
+                <TransitionCollection>
+                    <AddDeleteThemeTransition/>
+                    <EntranceThemeTransition IsStaggeringEnabled="True" />
+                </TransitionCollection>
+            </ListView.ItemContainerTransitions>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="models:Game">
+                    <Border Margin="0" Height="80"
+                            CornerRadius="8"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            helpers:GlowEffectHelper.IsEnabled="True"
+                            RenderTransformOrigin="0.5,0.5">
+                            
+                            <Border.Background>
+                                <!-- 卡片可见背景 -->
+                                <SolidColorBrush Color="{ThemeResource CardBackgroundFillColorDefault}" />
+                            </Border.Background>
+
+                            <Border.ContextFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="手动备份" Click="ContextBackup_Click">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE898;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Text="编辑游戏" Click="ContextEdit_Click">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE70F;"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem Text="删除游戏" Click="ContextDelete_Click">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE74D;" Foreground="Red"/>
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Border.ContextFlyout>
+                            
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
+                            
+                            <Grid>
+                                
+                                <Grid Margin="12,0" Background="Transparent">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- 游戏图标：优先显示从 EXE 提取的图标，否则显示默认图标 -->
+                                    <Border Grid.Column="0" Width="48" Height="48" CornerRadius="4" VerticalAlignment="Center">
+                                        <Grid>
+                                            <!-- 从 EXE 提取的图标 -->
+                                            <Image Source="{x:Bind GameIconSource, Mode=OneWay}" 
+                                                   Stretch="UniformToFill"
+                                                   Width="48" Height="48"
+                                                   Visibility="{x:Bind HasGameIcon, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"/>
+                                            <!-- 默认图标（无 EXE 图标时显示） -->
+                                            <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" 
+                                                    CornerRadius="4"
+                                                    Visibility="{x:Bind HasGameIcon, Converter={StaticResource InverseBoolVisibilityConverter}, Mode=OneWay}">
+                                                <FontIcon Glyph="&#xE7FC;" FontSize="24" Foreground="Gray" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    
+                                    <!-- 游戏信息文本 -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{x:Bind Name}" 
+                                                       FontWeight="Bold" 
+                                                       FontSize="16" 
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <!-- 来源平台徽章 -->
+                                            <Border Background="{ThemeResource SystemFillColorNeutralBackgroundBrush}" 
+                                                    CornerRadius="4" Padding="6,2" 
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind HasSource, Converter={StaticResource BoolVisibilityConverter}}">
+                                                <TextBlock Text="{x:Bind Source}" FontSize="11" Foreground="{ThemeResource SystemFillColorNeutralBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind DisplayAddedAt}" 
+                                                   Foreground="DarkGray" 
+                                                   FontSize="12" 
+                                                   Margin="0,4,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    
+                                    <!-- 启动状态消息（显示在启动按钮左侧） -->
+                                    <StackPanel Grid.Column="2" 
+                                                Orientation="Horizontal" 
+                                                VerticalAlignment="Center" 
+                                                Spacing="8"
+                                                Margin="8,0,0,0">
+                                        
+                                        <!-- 启动进度文本 -->
+                                        <StackPanel Orientation="Horizontal" 
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind HasLaunchStatus, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}">
+                                            <ProgressRing IsActive="True" Width="16" Height="16" />
+                                            <TextBlock Text="{x:Bind LaunchStatusMessage, Mode=OneWay}" 
+                                                       FontSize="12" 
+                                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                       VerticalAlignment="Center"
+                                                       MaxWidth="200"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <!-- 启动游戏按钮（仅设置了进程路径且未运行时显示） -->
+                                        <Button VerticalAlignment="Center"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Click="ListItemLaunchGame_Click"
+                                                Visibility="{x:Bind CanShowStartButton, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
+                                                ToolTipService.ToolTip="启动游戏"
+                                                Width="40" Height="40" Padding="0">
+                                            <FontIcon Glyph="&#xE768;" FontSize="16"/>
+                                        </Button>
+
+                                        <!-- 停止游戏按钮 + 运行中文字（仅运行时显示） -->
+                                        <StackPanel Orientation="Horizontal" 
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind CanShowStopButton, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}">
+                                            <TextBlock Text="{x:Bind DisplayRunningPid, Mode=OneWay}" 
+                                                       FontSize="12" 
+                                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <Button VerticalAlignment="Center"
+                                                    Click="ListItemLaunchGame_Click"
+                                                    ToolTipService.ToolTip="结束游戏"
+                                                    Width="40" Height="40" Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}">
+                                                <FontIcon Glyph="&#xE711;" FontSize="16" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                            </Button>
+                                        </StackPanel>
+
+                                        <!-- 正在结束游戏的加载指示 -->
+                                        <StackPanel Orientation="Horizontal" 
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind IsStopping, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}">
+                                            <ProgressRing IsActive="True" Width="16" Height="16" />
+                                            <TextBlock Text="正在结束..." 
+                                                       FontSize="12" 
+                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <!-- 定时备份手动启动按钮（无启动进程 + 已启用 + 未运行中） -->
+                                        <Button VerticalAlignment="Center"
+                                                Click="ListItemStartScheduledBackup_Click"
+                                                Visibility="{x:Bind CanShowScheduledBackupStart, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}"
+                                                ToolTipService.ToolTip="启动定时备份"
+                                                Width="40" Height="40" Padding="0">
+                                            <FontIcon Glyph="&#xE823;" FontSize="16" Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                        </Button>
+
+                                        <!-- 定时备份运行中指示 + 停止按钮 -->
+                                        <StackPanel Orientation="Horizontal" 
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind CanShowScheduledBackupStop, Converter={StaticResource BoolVisibilityConverter}, Mode=OneWay}">
+                                            <ProgressRing IsActive="True" Width="16" Height="16" />
+                                            <TextBlock Text="定时备份中" 
+                                                       FontSize="12" 
+                                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <Button VerticalAlignment="Center"
+                                                    Click="ListItemStopScheduledBackup_Click"
+                                                    ToolTipService.ToolTip="停止定时备份"
+                                                    Width="32" Height="32" Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}">
+                                                <FontIcon Glyph="&#xE711;" FontSize="12" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- 游戏详情浮层 (Overlay) -->
+        <Grid x:Name="DetailsOverlay" Grid.Row="0" Grid.RowSpan="2" 
+              Background="#80000000" 
+              Visibility="Collapsed"
+              Opacity="0">
+              
+            <Border x:Name="DetailsCard"
+                    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                    CornerRadius="12"
+                    Margin="48"
+                    Padding="32"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="DetailsCardScale" ScaleX="0.95" ScaleY="0.95" />
+                        <TranslateTransform x:Name="DetailsCardTranslate" Y="20" />
+                    </TransformGroup>
+                </Border.RenderTransform>
+                    
+                <Grid DataContext="{x:Bind ViewModel, Mode=OneWay}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    
+                    <!-- 顶部：标题与操作按钮 -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{Binding SelectedGame.Name}" FontSize="28" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding SelectedGame.ResolvedSaveFolderPath}" FontSize="13" Foreground="Gray" TextWrapping="WrapWholeWords" MaxLines="2"/>
+                        </StackPanel>
+                        
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Spacing="8">
+                            <!-- 启动游戏（仅设置了进程路径时显示） -->
+                            <Button Click="LaunchGame_Click"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    ToolTipService.ToolTip="启动游戏"
+                                    Visibility="{Binding SelectedGame.HasProcessPath, Converter={StaticResource BoolVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE768;" FontSize="14"/>
+                                    <TextBlock Text="启动"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 手动备份 -->
+                            <Button Click="ManualBackup_Click"
+                                    ToolTipService.ToolTip="手动备份当前存档">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE898;" FontSize="14"/>
+                                    <TextBlock Text="备份"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 删除游戏 -->
+                            <Button Click="DeleteGame_Click"
+                                    ToolTipService.ToolTip="删除游戏及所有存档">
+                                <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="Red"/>
+                            </Button>
+                            <!-- 关闭 -->
+                            <Button Click="CloseDetails_Click"
+                                    Style="{StaticResource DefaultButtonStyle}">
+                                <FontIcon Glyph="&#xE711;" FontSize="16" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 进度条区域（备份/恢复时显示） -->
+                    <StackPanel Grid.Row="1" 
+                                Margin="0,0,0,12" 
+                                Visibility="{Binding ActionProgressVisibility}" 
+                                Spacing="4">
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="Gray" />
+                        <ProgressBar IsIndeterminate="False" 
+                                     Value="{Binding ActionProgress}" 
+                                     HorizontalAlignment="Stretch" />
+                    </StackPanel>
+
+                    <!-- 存档列表标题及批量操作 -->
+                    <Grid Grid.Row="2" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Grid.Column="0" Text="存档列表" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        
+                        <!-- 批量操作按钮区域 -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- 进入批量删除模式 -->
+                            <Button x:Name="EnterBatchDeleteBtn" Click="EnterBatchDelete_Click"
+                                    ToolTipService.ToolTip="批量删除存档">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE762;" FontSize="13"/>
+                                    <TextBlock Text="批量删除" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 执行批量删除（批量模式下显示） -->
+                            <Button x:Name="ConfirmBatchDeleteBtn" Click="ConfirmBatchDelete_Click"
+                                    Visibility="Collapsed"
+                                    ToolTipService.ToolTip="删除所选存档">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="13" Foreground="Red"/>
+                                    <TextBlock x:Name="BatchDeleteCountText" Text="删除所选" FontSize="12" Foreground="Red"/>
+                                </StackPanel>
+                            </Button>
+                            <!-- 取消批量删除 -->
+                            <Button x:Name="CancelBatchDeleteBtn" Click="CancelBatchDelete_Click"
+                                    Content="取消" FontSize="12"
+                                    Visibility="Collapsed"
+                                    ToolTipService.ToolTip="取消批量操作"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <!-- 存档历史列表 -->
+                    <ListView x:Name="SavesListView" Grid.Row="3" ItemsSource="{Binding CurrentSaves}" SelectionMode="None"
+                              SelectionChanged="SavesListView_SelectionChanged">
+                        <ListView.ItemContainerTransitions>
+                            <TransitionCollection>
+                                <AddDeleteThemeTransition/>
+                                <EntranceThemeTransition IsStaggeringEnabled="True"/>
+                            </TransitionCollection>
+                        </ListView.ItemContainerTransitions>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="16" 
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
+                                        CornerRadius="8" 
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+                                        BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" />
+                                                <!-- 存档标签 badge -->
+                                                <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" 
+                                                        CornerRadius="4" Padding="6,2" 
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding IsExitSave}">
+                                                    <TextBlock Text="自动" FontSize="11" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Description}" FontSize="13" Margin="0,2,0,0" Foreground="Gray"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Spacing="16">
+                                                <TextBlock Text="{Binding DisplayBackupTime}" FontSize="12" Foreground="Gray"/>
+                                                <TextBlock Text="{Binding DisplaySize}" FontSize="12" Foreground="Gray"/>
+                                                <TextBlock Text="{Binding DisplayTag}" FontSize="12" Foreground="Gray"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        
+                                        <!-- 右侧操作栏（仅手动存档可操作） -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                                            <Button Content="还原" 
+                                                    Click="RestoreSave_Click"
+                                                    IsEnabled="{Binding CanRestore}"
+                                                    Style="{StaticResource AccentButtonStyle}" />
+                                            <Button Click="DeleteSave_Click"
+                                                    IsEnabled="{Binding CanDelete}"
+                                                    ToolTipService.ToolTip="删除存档">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="Red"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

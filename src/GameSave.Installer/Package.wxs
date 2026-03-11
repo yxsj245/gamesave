@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    GameSave Manager MSI 安装包定义
+    使用 WiX Toolset v6 构建
+-->
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+    <!-- 安装包元信息 -->
+    <Package
+        Name="GameSave Manager"
+        Manufacturer="GameSave"
+        Version="$(ProductVersion)"
+        UpgradeCode="7E8F3A2B-4C5D-6E7F-8A9B-0C1D2E3F4A5B"
+        Scope="perUser"
+        Codepage="65001"
+        Language="2052"
+        InstallerVersion="500">
+        
+        <MajorUpgrade
+            DowngradeErrorMessage="已安装了更新版本的 [ProductName]。如果需要安装旧版本，请先卸载当前版本。"
+            AllowSameVersionUpgrades="yes" />
+        
+        <MediaTemplate EmbedCab="yes" />
+        
+        <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+        
+        <!-- 自定义许可协议文件（中文） -->
+        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+        
+        <Icon Id="AppIcon.ico" SourceFile="$(IconPath)" />
+        <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+
+        <!-- 安装前检测 GameSave.exe 是否正在运行 -->
+        <Property Id="GAMESAVERUNNING" Value="0" />
+        <CustomAction Id="CheckGameSaveRunning" Script="vbscript" ScriptSourceFile="CheckProcess.vbs" Execute="immediate" Return="check" />
+        <InstallUISequence>
+            <Custom Action="CheckGameSaveRunning" Before="LaunchConditions" />
+        </InstallUISequence>
+        <InstallExecuteSequence>
+            <Custom Action="CheckGameSaveRunning" Before="LaunchConditions" />
+        </InstallExecuteSequence>
+        <Launch Condition='GAMESAVERUNNING = "0"' 
+                Message="GameSave Manager 正在运行中，请先从系统托盘右键点击图标选择「退出」后再安装。" />
+
+        <!-- 安装目录结构 -->
+        <StandardDirectory Id="LocalAppDataFolder">
+            <Directory Id="CompanyDir" Name="GameSave">
+                <Directory Id="INSTALLFOLDER" Name="GameSave Manager" />
+            </Directory>
+        </StandardDirectory>
+
+        <!-- 开始菜单快捷方式 -->
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ProgramMenuDir" Name="GameSave Manager">
+                <Component Id="StartMenuShortcut" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
+                    <Shortcut Id="StartMenuLink"
+                              Name="GameSave Manager"
+                              Target="[INSTALLFOLDER]GameSave.exe"
+                              WorkingDirectory="INSTALLFOLDER"
+                              Icon="AppIcon.ico" />
+                    <RemoveFolder Id="CleanupStartMenu" On="uninstall" />
+                    <RegistryValue Root="HKCU" Key="Software\GameSave\GameSave Manager"
+                                   Name="StartMenuInstalled" Type="integer" Value="1" KeyPath="yes" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+        
+        <!-- 桌面快捷方式 -->
+        <StandardDirectory Id="DesktopFolder">
+            <Component Id="DesktopShortcut" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+                <Shortcut Id="DesktopLink"
+                          Name="GameSave Manager"
+                          Target="[INSTALLFOLDER]GameSave.exe"
+                          WorkingDirectory="INSTALLFOLDER"
+                          Icon="AppIcon.ico" />
+                <RegistryValue Root="HKCU" Key="Software\GameSave\GameSave Manager"
+                               Name="DesktopInstalled" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </StandardDirectory>
+
+        <!-- 功能定义 -->
+        <Feature Id="ProductFeature" Title="GameSave Manager" Level="1">
+            <ComponentGroupRef Id="PublishedFiles" />
+            <ComponentRef Id="StartMenuShortcut" />
+            <ComponentRef Id="DesktopShortcut" />
+        </Feature>
+        
+    </Package>
+
+</Wix>

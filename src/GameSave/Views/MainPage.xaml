@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Page
+    x:Class="GameSave.Views.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    Loaded="Page_Loaded"
+    mc:Ignorable="d">
+
+    <Grid>
+        <!-- 主导航栏 -->
+            <NavigationView
+            x:Name="NavView"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="True"
+            PaneDisplayMode="Left"
+            OpenPaneLength="200"
+            SelectionChanged="NavView_SelectionChanged"
+            PaneOpening="NavView_PaneOpening"
+            PaneClosing="NavView_PaneClosing">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="我的游戏" Tag="Home" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="云端" Tag="Cloud">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE753;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <!-- 状态指示项 -->
+                <NavigationViewItem x:Name="StatusNavItem" 
+                                    Content="同步就绪" 
+                                    IsEnabled="False"
+                                    SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon>
+                        <FontIcon x:Name="StatusIcon" Glyph="&#xE895;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <!-- 主内容 -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 页面内容帧 - 禁用 ContentTransitions 避免侧边栏展开/收起时的抖动 -->
+                <Frame x:Name="ContentFrame" Grid.Row="0">
+                    <Frame.ContentTransitions>
+                        <TransitionCollection/>
+                    </Frame.ContentTransitions>
+                </Frame>
+
+                <!-- 底部运行状态条 (游戏运行时可见) -->
+                <Border x:Name="StatusBar" 
+                        Grid.Row="1" 
+                        Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,1,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Grid Grid.Row="0" Padding="16,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 状态图标 -->
+                            <FontIcon x:Name="StatusBarIcon" Grid.Column="0" 
+                                      Glyph="&#xE768;" FontSize="16" 
+                                      Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                      VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                            <!-- 状态文本 -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="StatusBarText" 
+                                           Text="游戏运行中" 
+                                           FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="StatusBarDetail" 
+                                           Text="" 
+                                           FontSize="11" Foreground="Gray"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- 进度指示器 -->
+                        <ProgressBar x:Name="StatusBarProgress" 
+                                     Grid.Row="1" 
+                                     IsIndeterminate="False"
+                                     Visibility="Collapsed"
+                                     VerticalAlignment="Bottom"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Page>

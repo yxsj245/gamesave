@@ -1,0 +1,48 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+    <PropertyGroup>
+        <!-- 安装包输出设置 -->
+        <OutputType>Package</OutputType>
+        <OutputName>GameSave-$(Platform)-Setup</OutputName>
+        
+        <!-- 平台设置 -->
+        <Platforms>x64;x86;ARM64</Platforms>
+        <InstallerPlatform Condition="'$(Platform)' == 'x64'">x64</InstallerPlatform>
+        <InstallerPlatform Condition="'$(Platform)' == 'x86'">x86</InstallerPlatform>
+        <InstallerPlatform Condition="'$(Platform)' == 'ARM64'">arm64</InstallerPlatform>
+        
+        <!-- 默认版本号（可通过命令行参数覆盖） -->
+        <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+        
+        <!-- 图标文件路径 -->
+        <IconPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\GameSave\Assets\app.ico'))</IconPath>
+        
+        <!-- 发布目录路径（可通过命令行参数覆盖） -->
+        <PublishDir Condition="'$(PublishDir)' == '' and '$(Platform)' == 'x64'">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\GameSave\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish'))</PublishDir>
+        <PublishDir Condition="'$(PublishDir)' == '' and '$(Platform)' == 'x86'">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\GameSave\bin\Release\net10.0-windows10.0.19041.0\win-x86\publish'))</PublishDir>
+        <PublishDir Condition="'$(PublishDir)' == '' and '$(Platform)' == 'ARM64'">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\GameSave\bin\Release\net10.0-windows10.0.19041.0\win-arm64\publish'))</PublishDir>
+        
+        <!-- 将 MSBuild 属性传递给 WiX 预处理器变量 -->
+        <DefineConstants>ProductVersion=$(ProductVersion);IconPath=$(IconPath)</DefineConstants>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <!-- WiX 扩展：用于安装向导 UI 对话框 -->
+        <PackageReference Include="WixToolset.UI.wixext" Version="6.*" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <!-- 使用 HarvestDirectory 自动收集发布目录中的所有文件 -->
+        <HarvestDirectory Include="$(PublishDir)">
+            <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+            <ComponentGroupName>PublishedFiles</ComponentGroupName>
+            <SuppressRootDirectory>true</SuppressRootDirectory>
+            <SuppressRegistry>true</SuppressRegistry>
+            <PreprocessorVariable>var.PublishDir</PreprocessorVariable>
+        </HarvestDirectory>
+    </ItemGroup>
+    
+    <PropertyGroup>
+        <!-- 也需要把 PublishDir 传给预处理器（HarvestDirectory 需要） -->
+        <DefineConstants>$(DefineConstants);PublishDir=$(PublishDir)</DefineConstants>
+    </PropertyGroup>
+</Project>
