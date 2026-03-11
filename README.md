@@ -263,9 +263,17 @@ dotnet run --project src/GameSave/GameSave.csproj
 
 ---
 
+## 💖 赞助
+
+如果你觉得这个项目对你有帮助，欢迎通过爱发电赞助支持开发者持续维护和更新！
+
+👉 [**爱发电 - 赞助本项目**](https://afdian.com/a/xiaozhuhouses)
+
+---
+
 ## 📄 许可证
 
-本项目采用 [GPL-3.0](LICENSE.txt) 许可证开源。
+本项目采用 [MIT](LICENSE) 许可证开源。
 
 ---
 
