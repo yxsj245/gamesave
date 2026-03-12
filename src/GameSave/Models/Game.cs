@@ -17,12 +17,54 @@ public class Game : INotifyPropertyChanged
     /// <summary>游戏名称</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>游戏存档目录路径（可能包含环境变量，如 %APPDATA%\Game）</summary>
-    public string SaveFolderPath { get; set; } = string.Empty;
+    /// <summary>
+    /// 游戏存档目录路径列表（可能包含环境变量，如 %APPDATA%\Game）
+    /// 支持多个存档目录，所有目录的内容会被统一打包备份
+    /// </summary>
+    public List<string> SaveFolderPaths { get; set; } = new();
 
-    /// <summary>展开环境变量后的实际存档目录路径（用于文件系统操作）</summary>
+    /// <summary>
+    /// 向后兼容的旧属性（仅用于反序列化旧版 JSON 数据）。
+    /// 如果旧数据只有 SaveFolderPath（单路径），反序列化后会自动迁移到 SaveFolderPaths。
+    /// 序列化时不再写出此字段。
+    /// </summary>
+    [JsonPropertyName("saveFolderPath")]
+    public string? LegacySaveFolderPath
+    {
+        get => null; // 不再序列化此字段
+        set
+        {
+            // 反序列化旧数据时，将单路径迁移到列表中
+            if (!string.IsNullOrWhiteSpace(value) && SaveFolderPaths.Count == 0)
+            {
+                SaveFolderPaths.Add(value);
+            }
+        }
+    }
+
+    /// <summary>展开环境变量后的实际存档目录路径列表（用于文件系统操作）</summary>
     [JsonIgnore]
-    public string ResolvedSaveFolderPath => PathEnvironmentHelper.ExpandEnvVariables(SaveFolderPath);
+    public List<string> ResolvedSaveFolderPaths => SaveFolderPaths
+        .Where(p => !string.IsNullOrWhiteSpace(p))
+        .Select(PathEnvironmentHelper.ExpandEnvVariables)
+        .ToList();
+
+    /// <summary>第一个存档目录路径（向后兼容，用于显示等场景）</summary>
+    [JsonIgnore]
+    public string SaveFolderPath => SaveFolderPaths.FirstOrDefault() ?? string.Empty;
+
+    /// <summary>第一个展开环境变量后的存档目录路径（向后兼容）</summary>
+    [JsonIgnore]
+    public string ResolvedSaveFolderPath => ResolvedSaveFolderPaths.FirstOrDefault() ?? string.Empty;
+
+    /// <summary>显示用的存档路径摘要（多个路径时显示数量）</summary>
+    [JsonIgnore]
+    public string DisplaySaveFolderPaths => ResolvedSaveFolderPaths.Count switch
+    {
+        0 => "未设置存档路径",
+        1 => ResolvedSaveFolderPaths[0],
+        _ => $"{ResolvedSaveFolderPaths[0]} 等 {ResolvedSaveFolderPaths.Count} 个目录"
+    };
 
     /// <summary>游戏图标路径（可选）</summary>
     public string? IconPath { get; set; }

@@ -130,9 +130,11 @@ public class ScheduledBackupService
         {
             System.Diagnostics.Debug.WriteLine($"[定时备份] 开始执行 {game.Name} 的定时备份...");
 
-            // 检查存档目录是否有文件
-            if (!Directory.Exists(game.ResolvedSaveFolderPath) ||
-                !Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
+            // 检查存档目录是否有文件（任一路径有文件即可备份）
+            bool anyHasFiles = game.ResolvedSaveFolderPaths.Any(p =>
+                Directory.Exists(p) &&
+                Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any());
+            if (!anyHasFiles)
             {
                 System.Diagnostics.Debug.WriteLine($"[定时备份] {game.Name} 存档目录无文件，跳过备份");
                 return;

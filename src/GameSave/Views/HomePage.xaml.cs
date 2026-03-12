@@ -210,46 +210,138 @@ namespace GameSave.Views
             };
             panel.Children.Add(nameBox);
 
-            // 存档目录
-            var savePathPanel = new Grid();
-            savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // ========== 多存档目录区域 ==========
+            var savePathsContainer = new StackPanel { Spacing = 8 };
+            var savePathRows = new List<(Grid row, TextBox textBox)>();
 
-            var savePathBox = new TextBox
+            // 存档目录标题行（含加号按钮）
+            var savePathHeaderPanel = new Grid();
+            savePathHeaderPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            savePathHeaderPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var savePathHeader = new TextBlock
             {
-                Header = "游戏存档目录 *",
-                PlaceholderText = "选择游戏存档所在的目录",
-                IsReadOnly = true
+                Text = "游戏存档目录 *",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
             };
-            Grid.SetColumn(savePathBox, 0);
+            Grid.SetColumn(savePathHeader, 0);
 
-            var browseSaveBtn = new Button
+            var addPathBtn = new Button
             {
-                Content = "浏览",
-                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
-                Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
-            };
-            browseSaveBtn.Click += async (s, args) =>
-            {
-                var picker = new Windows.Storage.Pickers.FolderPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                picker.FileTypeFilter.Add("*");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                var folder = await picker.PickSingleFolderAsync();
-                if (folder != null)
+                Content = new StackPanel
                 {
-                    // 自动将绝对路径替换为环境变量形式，方便多设备导入导出
-                    savePathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
-                }
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 4,
+                    Children =
+                    {
+                        new FontIcon { Glyph = "\uE710", FontSize = 12 },
+                        new TextBlock { Text = "添加目录", FontSize = 12 }
+                    }
+                },
+                Padding = new Microsoft.UI.Xaml.Thickness(8, 4, 8, 4)
             };
-            Grid.SetColumn(browseSaveBtn, 1);
+            Grid.SetColumn(addPathBtn, 1);
 
-            savePathPanel.Children.Add(savePathBox);
-            savePathPanel.Children.Add(browseSaveBtn);
-            panel.Children.Add(savePathPanel);
+            savePathHeaderPanel.Children.Add(savePathHeader);
+            savePathHeaderPanel.Children.Add(addPathBtn);
+            panel.Children.Add(savePathHeaderPanel);
+            panel.Children.Add(savePathsContainer);
+
+            // 添加存档路径行的方法
+            void AddSavePathRow(string initialPath = "")
+            {
+                var rowGrid = new Grid();
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var pathBox = new TextBox
+                {
+                    PlaceholderText = "选择游戏存档所在的目录",
+                    IsReadOnly = true,
+                    Text = initialPath
+                };
+                Grid.SetColumn(pathBox, 0);
+
+                var browseBtn = new Button
+                {
+                    Content = "浏览",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
+                };
+                browseBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FolderPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var folder = await picker.PickSingleFolderAsync();
+                    if (folder != null)
+                    {
+                        pathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                    }
+                };
+                Grid.SetColumn(browseBtn, 1);
+
+                var removeBtn = new Button
+                {
+                    Content = new FontIcon { Glyph = "\uE74D", FontSize = 12, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red) },
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0),
+                    Padding = new Microsoft.UI.Xaml.Thickness(6),
+                    // 只有一行时不允许删除
+                    Visibility = savePathRows.Count == 0
+                        ? Microsoft.UI.Xaml.Visibility.Collapsed
+                        : Microsoft.UI.Xaml.Visibility.Visible
+                };
+                var currentRow = rowGrid;
+                var currentPathBox = pathBox;
+                removeBtn.Click += (s, args) =>
+                {
+                    savePathsContainer.Children.Remove(currentRow);
+                    savePathRows.RemoveAll(r => r.row == currentRow);
+                    // 如果只剩一行，隐藏其删除按钮
+                    if (savePathRows.Count == 1)
+                    {
+                        var lastRow = savePathRows[0].row;
+                        // 找到删除按钮（第三个子元素）
+                        if (lastRow.Children.Count >= 3)
+                        {
+                            ((FrameworkElement)lastRow.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                        }
+                    }
+                };
+                Grid.SetColumn(removeBtn, 2);
+
+                rowGrid.Children.Add(pathBox);
+                rowGrid.Children.Add(browseBtn);
+                rowGrid.Children.Add(removeBtn);
+
+                savePathsContainer.Children.Add(rowGrid);
+                savePathRows.Add((rowGrid, pathBox));
+
+                // 添加新行后，更新所有行的删除按钮可见性
+                if (savePathRows.Count > 1)
+                {
+                    foreach (var (row, _) in savePathRows)
+                    {
+                        if (row.Children.Count >= 3)
+                        {
+                            ((FrameworkElement)row.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        }
+                    }
+                }
+            }
+
+            // 默认添加一行
+            AddSavePathRow();
+
+            // 加号按钮点击事件
+            addPathBtn.Click += (s, args) => AddSavePathRow();
 
             // 启动进程（可选）
             var processPathPanel = new Grid();
@@ -398,7 +490,10 @@ namespace GameSave.Views
             if (result == ContentDialogResult.Primary)
             {
                 ViewModel.NewGameName = nameBox.Text;
-                ViewModel.NewGameSavePath = savePathBox.Text;
+                ViewModel.NewGameSavePaths = savePathRows
+                    .Select(r => r.textBox.Text)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .ToList();
                 ViewModel.NewGameProcessPath = processPathBox.Text;
                 ViewModel.NewGameProcessArgs = argsBox.Text;
 
@@ -1246,6 +1341,9 @@ namespace GameSave.Views
             var game = GetGameFromContext(sender);
             if (game == null) return;
 
+            // 保存原始存档路径，用于后续比较是否有修改
+            var originalSavePaths = new List<string>(game.SaveFolderPaths);
+
             var scrollViewer = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1270,15 +1368,152 @@ namespace GameSave.Views
             };
             panel.Children.Add(nameBox);
 
-            // 存档目录（只读，不允许更改）
-            var savePathBox = new TextBox
+            // ========== 多存档目录区域（可编辑） ==========
+            var editSavePathsContainer = new StackPanel { Spacing = 8 };
+            var editSavePathRows = new List<(Grid row, TextBox textBox)>();
+
+            // 存档目录标题行（含加号按钮和提醒文字）
+            var editSavePathHeaderPanel = new Grid();
+            editSavePathHeaderPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            editSavePathHeaderPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var editSavePathHeader = new TextBlock
             {
-                Header = "游戏存档目录（不可更改）",
-                Text = game.ResolvedSaveFolderPath,
-                IsReadOnly = true,
-                IsEnabled = false
+                Text = "游戏存档目录",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
             };
-            panel.Children.Add(savePathBox);
+            Grid.SetColumn(editSavePathHeader, 0);
+
+            var editAddPathBtn = new Button
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 4,
+                    Children =
+                    {
+                        new FontIcon { Glyph = "\uE710", FontSize = 12 },
+                        new TextBlock { Text = "添加目录", FontSize = 12 }
+                    }
+                },
+                Padding = new Microsoft.UI.Xaml.Thickness(8, 4, 8, 4)
+            };
+            Grid.SetColumn(editAddPathBtn, 1);
+
+            editSavePathHeaderPanel.Children.Add(editSavePathHeader);
+            editSavePathHeaderPanel.Children.Add(editAddPathBtn);
+            panel.Children.Add(editSavePathHeaderPanel);
+
+            // 修改提示
+            panel.Children.Add(new TextBlock
+            {
+                Text = "⚠️ 修改存档路径可能导致已有备份存档无法正常还原",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+
+            panel.Children.Add(editSavePathsContainer);
+
+            // 添加存档路径行的方法（编辑模式）
+            void AddEditSavePathRow(string initialPath = "")
+            {
+                var rowGrid = new Grid();
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var pathBox = new TextBox
+                {
+                    PlaceholderText = "选择游戏存档所在的目录",
+                    IsReadOnly = true,
+                    Text = initialPath
+                };
+                Grid.SetColumn(pathBox, 0);
+
+                var browseBtn = new Button
+                {
+                    Content = "浏览",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
+                };
+                browseBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FolderPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var folder = await picker.PickSingleFolderAsync();
+                    if (folder != null)
+                    {
+                        pathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                    }
+                };
+                Grid.SetColumn(browseBtn, 1);
+
+                var removeBtn = new Button
+                {
+                    Content = new FontIcon { Glyph = "\uE74D", FontSize = 12, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red) },
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0),
+                    Padding = new Microsoft.UI.Xaml.Thickness(6),
+                    Visibility = editSavePathRows.Count == 0
+                        ? Microsoft.UI.Xaml.Visibility.Collapsed
+                        : Microsoft.UI.Xaml.Visibility.Visible
+                };
+                var currentRow = rowGrid;
+                removeBtn.Click += (s, args) =>
+                {
+                    editSavePathsContainer.Children.Remove(currentRow);
+                    editSavePathRows.RemoveAll(r => r.row == currentRow);
+                    if (editSavePathRows.Count == 1)
+                    {
+                        var lastRow = editSavePathRows[0].row;
+                        if (lastRow.Children.Count >= 3)
+                        {
+                            ((FrameworkElement)lastRow.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                        }
+                    }
+                };
+                Grid.SetColumn(removeBtn, 2);
+
+                rowGrid.Children.Add(pathBox);
+                rowGrid.Children.Add(browseBtn);
+                rowGrid.Children.Add(removeBtn);
+
+                editSavePathsContainer.Children.Add(rowGrid);
+                editSavePathRows.Add((rowGrid, pathBox));
+
+                if (editSavePathRows.Count > 1)
+                {
+                    foreach (var (row, _) in editSavePathRows)
+                    {
+                        if (row.Children.Count >= 3)
+                        {
+                            ((FrameworkElement)row.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                        }
+                    }
+                }
+            }
+
+            // 加载现有存档路径
+            if (game.SaveFolderPaths.Count > 0)
+            {
+                foreach (var path in game.SaveFolderPaths)
+                {
+                    AddEditSavePathRow(path);
+                }
+            }
+            else
+            {
+                AddEditSavePathRow();
+            }
+
+            editAddPathBtn.Click += (s, args) => AddEditSavePathRow();
 
             // 启动进程（可选）
             var processPathPanel = new Grid();
@@ -1451,8 +1686,37 @@ namespace GameSave.Views
 
             if (result == ContentDialogResult.Primary)
             {
-                // 更新游戏属性（存档目录不变）
+                // 收集新的存档路径
+                var newSavePaths = editSavePathRows
+                    .Select(r => r.textBox.Text)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .ToList();
+
+                // 检查存档路径是否有变化，如果有则进行二次确认
+                bool pathsChanged = !originalSavePaths.SequenceEqual(newSavePaths);
+
+                if (pathsChanged && newSavePaths.Count > 0)
+                {
+                    var confirmDialog = new ContentDialog
+                    {
+                        Title = "⚠️ 确认修改存档路径",
+                        Content = "你修改了游戏存档路径。\n\n修改后，已有的备份存档可能无法正常还原到新路径。\n请确保你了解此操作的影响。\n\n确定要修改吗？",
+                        PrimaryButtonText = "确认修改",
+                        SecondaryButtonText = "取消",
+                        DefaultButton = ContentDialogButton.Secondary,
+                        XamlRoot = this.XamlRoot
+                    };
+
+                    var confirmResult = await confirmDialog.ShowWithThemeAsync();
+                    if (confirmResult != ContentDialogResult.Primary)
+                    {
+                        return; // 用户取消，不保存
+                    }
+                }
+
+                // 更新游戏属性
                 game.Name = nameBox.Text.Trim();
+                game.SaveFolderPaths = newSavePaths;
                 game.ProcessPath = string.IsNullOrWhiteSpace(processPathBox.Text) ? null : processPathBox.Text.Trim();
                 game.ProcessArgs = string.IsNullOrWhiteSpace(argsBox.Text) ? null : argsBox.Text.Trim();
 

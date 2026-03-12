@@ -242,7 +242,9 @@ public partial class CloudViewModel : BaseViewModel
             {
                 Id = group.CloudGameMetadata.Id,
                 Name = group.CloudGameMetadata.Name,
-                SaveFolderPath = group.CloudGameMetadata.SaveFolderPath,
+                SaveFolderPaths = group.CloudGameMetadata.SaveFolderPaths.Count > 0
+                    ? new List<string>(group.CloudGameMetadata.SaveFolderPaths)
+                    : new List<string> { group.CloudGameMetadata.SaveFolderPath },
                 IconPath = group.CloudGameMetadata.IconPath,
                 ProcessPath = group.CloudGameMetadata.ProcessPath,
                 ProcessArgs = group.CloudGameMetadata.ProcessArgs,

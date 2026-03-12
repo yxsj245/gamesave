@@ -104,8 +104,10 @@ public class GameService
         // 检测存档目录是否有文件，有则自动初始备份
         // 添加游戏时游戏必定未在运行中（刚添加），有进程路径的可以用直接模式
         // 无进程路径的无法判断游戏是否在外部运行，走热备份
-        if (Directory.Exists(game.ResolvedSaveFolderPath) &&
-            Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
+        bool anyHasFiles = game.ResolvedSaveFolderPaths.Any(p =>
+            Directory.Exists(p) &&
+            Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any());
+        if (anyHasFiles)
         {
             bool needHotBackup = !game.HasProcessPath;
             await _localStorageService.CreateExitSaveAsync(game, useHotBackup: needHotBackup);
@@ -203,19 +205,22 @@ public class GameService
             }
             else
             {
-                // 清空存档目录
-                if (Directory.Exists(game.ResolvedSaveFolderPath))
+                // 清空所有存档目录
+                foreach (var savePath in game.ResolvedSaveFolderPaths)
                 {
-                    game.LaunchStatusMessage = "正在清空存档目录...";
-                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    if (Directory.Exists(savePath))
                     {
-                        Status = GameRunStatus.Launching,
-                        GameName = game.Name,
-                        GameId = game.Id,
-                        Message = $"正在清空 {game.Name} 的存档目录...",
-                        Progress = 50
-                    });
-                    ClearDirectory(game.ResolvedSaveFolderPath);
+                        game.LaunchStatusMessage = "正在清空存档目录...";
+                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        {
+                            Status = GameRunStatus.Launching,
+                            GameName = game.Name,
+                            GameId = game.Id,
+                            Message = $"正在清空 {game.Name} 的存档目录...",
+                            Progress = 50
+                        });
+                        ClearDirectory(savePath);
+                    }
                 }
 
                 // 解压存档
@@ -228,7 +233,7 @@ public class GameService
                     Message = $"正在解压存档到 {game.Name} 的存档目录...",
                     Progress = 60
                 });
-                await TarHelper.ExtractTarAsync(latestExitSave.Path, game.ResolvedSaveFolderPath);
+                await TarHelper.ExtractTarToMultipleAsync(latestExitSave.Path, game.ResolvedSaveFolderPaths);
 
                 // 更新进度：解压完成
                 game.LaunchStatusMessage = "存档恢复完成，正在启动游戏...";
@@ -358,8 +363,10 @@ public class GameService
             string? backupError = null;
             try
             {
-                if (Directory.Exists(game.ResolvedSaveFolderPath) &&
-                    Directory.EnumerateFiles(game.ResolvedSaveFolderPath, "*", SearchOption.AllDirectories).Any())
+                bool anyHasFiles = game.ResolvedSaveFolderPaths.Any(p =>
+                    Directory.Exists(p) &&
+                    Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any());
+                if (anyHasFiles)
                 {
                     var progress = new Progress<double>(p =>
                     {

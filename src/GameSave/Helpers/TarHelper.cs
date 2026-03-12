@@ -39,6 +39,227 @@ public static class TarHelper
     }
 
     /// <summary>
+    /// 将多个源目录打包为一个 .tar 文件
+    /// 每个源目录在 tar 中以序号子目录（0, 1, 2...）隔离存储
+    /// </summary>
+    /// <param name="sourceDirs">源目录路径列表</param>
+    /// <param name="outputPath">输出 .tar 文件路径</param>
+    /// <param name="progress">进度报告回调</param>
+    public static async Task CreateTarFromMultipleAsync(List<string> sourceDirs, string outputPath, IProgress<double>? progress = null)
+    {
+        if (sourceDirs == null || sourceDirs.Count == 0)
+            throw new ArgumentException("至少需要一个源目录");
+
+        // 如果只有一个目录，直接使用单目录方法（保持向后兼容）
+        if (sourceDirs.Count == 1)
+        {
+            await CreateTarAsync(sourceDirs[0], outputPath, progress);
+            return;
+        }
+
+        // 确保输出目录存在
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        int totalFiles = 0;
+        int[] processedFiles = { 0 };
+        if (progress != null)
+        {
+            foreach (var dir in sourceDirs)
+            {
+                if (Directory.Exists(dir))
+                    totalFiles += Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length;
+            }
+            progress.Report(0);
+        }
+
+        await using var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+        await using var tarWriter = new TarWriter(fileStream);
+
+        for (int i = 0; i < sourceDirs.Count; i++)
+        {
+            var sourceDir = sourceDirs[i];
+            if (!Directory.Exists(sourceDir)) continue;
+
+            // 使用索引作为 tar 条目名称前缀来隔离不同源目录
+            var prefix = i.ToString();
+            await AddPrefixedDirectoryToTarAsync(tarWriter, sourceDir, prefix, "", progress, totalFiles, processedFiles);
+        }
+    }
+
+    /// <summary>
+    /// 将 .tar 文件解包到多个目标目录
+    /// 根据 tar 中的顶层序号目录（0, 1, 2...）分别解压到对应的目标目录
+    /// </summary>
+    /// <param name="tarPath">.tar 文件路径</param>
+    /// <param name="targetDirs">目标目录路径列表（与打包时的顺序对应）</param>
+    /// <param name="progress">进度报告回调</param>
+    public static async Task ExtractTarToMultipleAsync(string tarPath, List<string> targetDirs, IProgress<double>? progress = null)
+    {
+        if (targetDirs == null || targetDirs.Count == 0)
+            throw new ArgumentException("至少需要一个目标目录");
+
+        // 如果只有一个目标目录，直接使用单目录方法
+        if (targetDirs.Count == 1)
+        {
+            await ExtractTarAsync(tarPath, targetDirs[0], progress);
+            return;
+        }
+
+        if (!File.Exists(tarPath))
+            throw new FileNotFoundException($"Tar 文件不存在: {tarPath}");
+
+        // 确保所有目标目录存在
+        foreach (var dir in targetDirs)
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        int totalEntries = 0;
+        int processedEntries = 0;
+        if (progress != null)
+        {
+            totalEntries = await GetEntryCountAsync(tarPath);
+            progress.Report(0);
+        }
+
+        await using var fileStream = new FileStream(tarPath, FileMode.Open, FileAccess.Read);
+        await using var tarReader = new TarReader(fileStream);
+
+        // 先检查 tar 是否为多目录格式（顶层为数字目录名），否则退化到单目录解压
+        bool isMultiFormat = await IsMultiDirectoryFormatAsync(tarPath);
+
+        if (!isMultiFormat)
+        {
+            // 旧格式（单目录）：全部解压到第一个目标目录
+            fileStream.Position = 0;
+            await using var reader2 = new TarReader(fileStream);
+            await ExtractReaderToDir(reader2, targetDirs[0], targetDirs[0], progress, totalEntries);
+            return;
+        }
+
+        // 多目录格式：按序号前缀分发到不同的目标目录
+        while (await tarReader.GetNextEntryAsync() is { } entry)
+        {
+            // 解析顶层目录名（序号）
+            var entryName = entry.Name.Replace('\\', '/');
+            var firstSlash = entryName.IndexOf('/');
+            if (firstSlash < 0)
+            {
+                processedEntries++;
+                continue;
+            }
+
+            var topDirName = entryName[..firstSlash];
+            if (!int.TryParse(topDirName, out var dirIndex) || dirIndex < 0 || dirIndex >= targetDirs.Count)
+            {
+                processedEntries++;
+                continue;
+            }
+
+            // 去掉顶层目录前缀，得到相对路径
+            var relativePath = entryName[(firstSlash + 1)..];
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                processedEntries++;
+                continue;
+            }
+
+            var destPath = Path.Combine(targetDirs[dirIndex], relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+            // 安全检查
+            var fullDestPath = Path.GetFullPath(destPath);
+            var fullTargetDir = Path.GetFullPath(targetDirs[dirIndex]);
+            if (!fullDestPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"检测到不安全的 tar 条目路径: {entry.Name}");
+            }
+
+            if (entry.EntryType == TarEntryType.Directory)
+            {
+                Directory.CreateDirectory(destPath);
+            }
+            else if (entry.EntryType == TarEntryType.RegularFile)
+            {
+                var fileDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(fileDir))
+                    Directory.CreateDirectory(fileDir);
+                await entry.ExtractToFileAsync(destPath, overwrite: true);
+            }
+
+            if (progress != null)
+            {
+                processedEntries++;
+                double pct = totalEntries > 0 ? (double)processedEntries / totalEntries * 100 : 100;
+                progress.Report(Math.Min(100, pct));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 检查 tar 文件是否为多目录格式（顶层条目为数字命名的目录）
+    /// </summary>
+    private static async Task<bool> IsMultiDirectoryFormatAsync(string tarPath)
+    {
+        try
+        {
+            await using var fs = new FileStream(tarPath, FileMode.Open, FileAccess.Read);
+            await using var reader = new TarReader(fs);
+
+            // 检查前几个条目
+            while (await reader.GetNextEntryAsync() is { } entry)
+            {
+                var name = entry.Name.Replace('\\', '/').TrimEnd('/');
+                var firstSlash = name.IndexOf('/');
+                var topDir = firstSlash > 0 ? name[..firstSlash] : name;
+
+                // 如果顶层是数字目录名，认为是多目录格式
+                if (int.TryParse(topDir, out _))
+                    return true;
+
+                // 如果不是数字目录名，认为是旧的单目录格式
+                return false;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// 辅助方法：将 TarReader 的内容解压到指定目录
+    /// </summary>
+    private static async Task ExtractReaderToDir(TarReader reader, string targetDir, string securityBaseDir, IProgress<double>? progress, int totalEntries)
+    {
+        int processed = 0;
+        while (await reader.GetNextEntryAsync() is { } entry)
+        {
+            var destPath = Path.Combine(targetDir, entry.Name.Replace('/', Path.DirectorySeparatorChar));
+            var fullDestPath = Path.GetFullPath(destPath);
+            var fullTargetDir = Path.GetFullPath(securityBaseDir);
+            if (!fullDestPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"检测到不安全的 tar 条目路径: {entry.Name}");
+
+            if (entry.EntryType == TarEntryType.Directory)
+                Directory.CreateDirectory(destPath);
+            else if (entry.EntryType == TarEntryType.RegularFile)
+            {
+                var fileDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(fileDir))
+                    Directory.CreateDirectory(fileDir);
+                await entry.ExtractToFileAsync(destPath, overwrite: true);
+            }
+
+            if (progress != null)
+            {
+                processed++;
+                double pct = totalEntries > 0 ? (double)processed / totalEntries * 100 : 100;
+                progress.Report(Math.Min(100, pct));
+            }
+        }
+    }
+
+    /// <summary>
     /// 递归添加目录内容到 tar 归档
     /// </summary>
     private static async Task AddDirectoryToTarAsync(TarWriter writer, string baseDir, string relativePath, IProgress<double>? progress, int totalFiles, int[] processedFiles)
@@ -70,6 +291,45 @@ public static class TarHelper
                 : Path.Combine(relativePath, dirName);
 
             await AddDirectoryToTarAsync(writer, baseDir, newRelativePath, progress, totalFiles, processedFiles);
+        }
+    }
+
+    /// <summary>
+    /// 递归添加目录内容到 tar 归档（带前缀版本，用于多目录打包）
+    /// entryPrefix 仅用于 tar 条目名称前缀，不参与文件系统路径导航
+    /// </summary>
+    private static async Task AddPrefixedDirectoryToTarAsync(TarWriter writer, string baseDir, string entryPrefix, string relativePath, IProgress<double>? progress, int totalFiles, int[] processedFiles)
+    {
+        // 文件系统导航：使用 baseDir + relativePath（不涉及 entryPrefix）
+        var currentDir = string.IsNullOrEmpty(relativePath) ? baseDir : Path.Combine(baseDir, relativePath);
+
+        // 添加文件
+        foreach (var filePath in Directory.GetFiles(currentDir))
+        {
+            // tar 条目名称：entryPrefix/relativePath/fileName
+            var innerPath = string.IsNullOrEmpty(relativePath)
+                ? Path.GetFileName(filePath)
+                : Path.Combine(relativePath, Path.GetFileName(filePath)).Replace('\\', '/');
+            var entryName = $"{entryPrefix}/{innerPath}";
+
+            await writer.WriteEntryAsync(filePath, entryName);
+            if (progress != null)
+            {
+                processedFiles[0]++;
+                double pct = totalFiles > 0 ? (double)processedFiles[0] / totalFiles * 100 : 100;
+                progress.Report(Math.Min(100, pct));
+            }
+        }
+
+        // 递归添加子目录
+        foreach (var dirPath in Directory.GetDirectories(currentDir))
+        {
+            var dirName = Path.GetFileName(dirPath);
+            var newRelativePath = string.IsNullOrEmpty(relativePath)
+                ? dirName
+                : Path.Combine(relativePath, dirName);
+
+            await AddPrefixedDirectoryToTarAsync(writer, baseDir, entryPrefix, newRelativePath, progress, totalFiles, processedFiles);
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using GameSave.Models;
 using GameSave.Services;
 
@@ -121,11 +121,11 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _newGameName, value);
     }
 
-    private string _newGameSavePath = string.Empty;
-    public string NewGameSavePath
+    private List<string> _newGameSavePaths = new();
+    public List<string> NewGameSavePaths
     {
-        get => _newGameSavePath;
-        set => SetProperty(ref _newGameSavePath, value);
+        get => _newGameSavePaths;
+        set => SetProperty(ref _newGameSavePaths, value);
     }
 
     private string _newGameProcessPath = string.Empty;
@@ -279,7 +279,7 @@ public partial class MainViewModel : BaseViewModel
     public void ResetAddGameForm()
     {
         NewGameName = string.Empty;
-        NewGameSavePath = string.Empty;
+        NewGameSavePaths = new List<string>();
         NewGameProcessPath = string.Empty;
         NewGameProcessArgs = string.Empty;
         SelectedCloudConfigId = null;
@@ -299,9 +299,9 @@ public partial class MainViewModel : BaseViewModel
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(NewGameSavePath))
+        if (NewGameSavePaths.Count == 0 || NewGameSavePaths.All(string.IsNullOrWhiteSpace))
         {
-            StatusMessage = "请选择游戏存档目录";
+            StatusMessage = "请添加至少一个游戏存档目录";
             return false;
         }
 
@@ -313,7 +313,10 @@ public partial class MainViewModel : BaseViewModel
             var game = new Game
             {
                 Name = NewGameName.Trim(),
-                SaveFolderPath = NewGameSavePath.Trim(),
+                SaveFolderPaths = NewGameSavePaths
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .Select(p => p.Trim())
+                    .ToList(),
                 ProcessPath = string.IsNullOrWhiteSpace(NewGameProcessPath) ? null : NewGameProcessPath.Trim(),
                 ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
                 CloudConfigId = SelectedCloudConfigId,
@@ -375,7 +378,9 @@ public partial class MainViewModel : BaseViewModel
                     var game = new Game
                     {
                         Name = detected.Name.Trim(),
-                        SaveFolderPath = detected.SaveFolderPath.Trim(),
+                        SaveFolderPaths = string.IsNullOrWhiteSpace(detected.SaveFolderPath)
+                            ? new List<string>()
+                            : new List<string> { detected.SaveFolderPath.Trim() },
                         ProcessPath = string.IsNullOrWhiteSpace(detected.ExePath) ? null : detected.ExePath.Trim(),
                         ProcessArgs = string.IsNullOrWhiteSpace(detected.ProcessArgs) ? null : detected.ProcessArgs.Trim(),
                         CloudConfigId = detected.CloudConfigId,
