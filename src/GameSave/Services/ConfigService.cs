@@ -95,12 +95,13 @@ public class ConfigService
 
     /// <summary>
     /// 初始化配置服务，加载或创建配置文件
+    /// config.json 始终保存在默认目录下，WorkDirectory 字段记录实际工作目录位置
     /// </summary>
     public async Task InitializeAsync()
     {
         var defaultWorkDir = GetDefaultWorkDirectory();
 
-        // 确保工作目录存在
+        // 确保默认目录存在（config.json 始终在此处）
         Directory.CreateDirectory(defaultWorkDir);
 
         _configFilePath = Path.Combine(defaultWorkDir, "config.json");
@@ -110,7 +111,16 @@ public class ConfigService
             // 加载已有配置
             var json = await File.ReadAllTextAsync(_configFilePath);
             _config = JsonSerializer.Deserialize(json, AppJsonContext.Default.AppConfig) ?? new AppConfig();
-            _config.WorkDirectory = defaultWorkDir;
+
+            // 如果配置中的 WorkDirectory 为空，则使用默认值
+            if (string.IsNullOrWhiteSpace(_config.WorkDirectory))
+            {
+                _config.WorkDirectory = defaultWorkDir;
+                await SaveConfigAsync();
+            }
+
+            // 确保实际工作目录存在
+            Directory.CreateDirectory(_config.WorkDirectory);
         }
         else
         {
@@ -133,14 +143,83 @@ public class ConfigService
     }
 
     /// <summary>
-    /// 修改工作目录（会迁移配置文件）
+    /// 修改工作目录（仅更新配置，不迁移旧内容）
+    /// config.json 保持在默认目录，只更新其中的 WorkDirectory 字段
     /// </summary>
     public async Task ChangeWorkDirectoryAsync(string newPath)
     {
         Directory.CreateDirectory(newPath);
         _config.WorkDirectory = newPath;
-        _configFilePath = Path.Combine(newPath, "config.json");
+        // _configFilePath 不变，始终指向默认目录下的 config.json
         await SaveConfigAsync();
+    }
+
+    /// <summary>
+    /// 修改工作目录并迁移旧目录内容到新目录
+    /// </summary>
+    /// <param name="newPath">新的工作目录路径</param>
+    /// <param name="progress">进度回调，报告迁移百分比和当前状态文本</param>
+    public async Task ChangeWorkDirectoryWithMigrationAsync(string newPath, IProgress<(double percent, string status)>? progress = null)
+    {
+        var oldPath = _config.WorkDirectory;
+        Directory.CreateDirectory(newPath);
+
+        // 收集需要迁移的所有文件（排除 config.json）
+        var oldConfigJson = Path.Combine(oldPath, "config.json");
+        var filesToCopy = Directory.GetFiles(oldPath, "*", SearchOption.AllDirectories)
+            .Where(f => !f.Equals(_configFilePath, StringComparison.OrdinalIgnoreCase)
+                     && !f.Equals(oldConfigJson, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (filesToCopy.Count > 0)
+        {
+            for (int i = 0; i < filesToCopy.Count; i++)
+            {
+                var sourceFile = filesToCopy[i];
+                var relativePath = Path.GetRelativePath(oldPath, sourceFile);
+                var destFile = Path.Combine(newPath, relativePath);
+
+                // 确保目标子目录存在
+                var destDir = Path.GetDirectoryName(destFile);
+                if (destDir != null)
+                    Directory.CreateDirectory(destDir);
+
+                // 复制文件（在后台线程执行 I/O）
+                await Task.Run(() => File.Copy(sourceFile, destFile, overwrite: true));
+
+                // 报告进度
+                var percent = (double)(i + 1) / filesToCopy.Count * 100;
+                var fileName = Path.GetFileName(sourceFile);
+                progress?.Report((percent, $"正在迁移: {relativePath} ({i + 1}/{filesToCopy.Count})"));
+            }
+        }
+
+        // 更新配置指向新路径（config.json 保持在默认目录）
+        _config.WorkDirectory = newPath;
+        await SaveConfigAsync();
+
+        // 清理旧工作目录：删除所有数据内容，只保留 config.json
+        progress?.Report((99, "正在清理旧工作目录..."));
+        await Task.Run(() =>
+        {
+            // 删除旧目录下的所有子目录
+            foreach (var dir in Directory.GetDirectories(oldPath))
+            {
+                try { Directory.Delete(dir, recursive: true); } catch { }
+            }
+
+            // 删除旧目录下除 config.json 外的所有文件
+            foreach (var file in Directory.GetFiles(oldPath))
+            {
+                if (!file.Equals(_configFilePath, StringComparison.OrdinalIgnoreCase)
+                    && !Path.GetFileName(file).Equals("config.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+        });
+
+        progress?.Report((100, "迁移完成"));
     }
 
     /// <summary>

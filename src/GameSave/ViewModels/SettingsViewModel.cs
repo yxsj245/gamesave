@@ -148,11 +148,22 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// 更改工作目录
+    /// 更改工作目录（不迁移旧内容）
     /// </summary>
     public async Task ChangeWorkDirectoryAsync(string newPath)
     {
         await _configService.ChangeWorkDirectoryAsync(newPath);
+        WorkDirectory = newPath;
+    }
+
+    /// <summary>
+    /// 更改工作目录并迁移旧内容到新目录
+    /// </summary>
+    /// <param name="newPath">新的工作目录路径</param>
+    /// <param name="progress">进度回调</param>
+    public async Task ChangeWorkDirectoryWithMigrationAsync(string newPath, IProgress<(double percent, string status)>? progress = null)
+    {
+        await _configService.ChangeWorkDirectoryWithMigrationAsync(newPath, progress);
         WorkDirectory = newPath;
     }
 
