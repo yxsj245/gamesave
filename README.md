@@ -275,7 +275,7 @@ dotnet run --project src/GameSave/GameSave.csproj
 
 如果你觉得这个项目对你有帮助，欢迎通过爱发电赞助支持开发者持续维护和更新！
 
-👉 [**爱发电 - 赞助本项目**](https://afdian.com/a/xiaozhuhouses)
+👉 [**爱发电 - 赞助本项目**](https://ifdian.net/a/xiaozhuhouses)
 
 ---
 

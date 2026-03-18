@@ -262,7 +262,7 @@
                             <FontIcon Glyph="&#xEB51;" FontSize="14" Foreground="Gray" VerticalAlignment="Center"/>
                             <TextBlock Text="赞助支持：" FontSize="13" Foreground="Gray" VerticalAlignment="Center"/>
                             <HyperlinkButton Content="爱发电" 
-                                             NavigateUri="https://afdian.com/a/xiaozhuhouses" 
+                                             NavigateUri="https://ifdian.net/a/xiaozhuhouses" 
                                              Padding="0" 
                                              VerticalAlignment="Center"/>
                         </StackPanel>
