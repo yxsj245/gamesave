@@ -137,7 +137,14 @@ gamesave/
 3. 双击运行安装程序，按照向导完成安装
 4. 启动 GameSave Manager，开始保护你的游戏进度！
 
-### 方式二：从源码构建
+### 方式二：便携版（免安装）
+
+1. 前往 [Releases](https://github.com/yxsj245/gamesave/releases) 页面
+2. 下载最新的 `GameSave-x64-Portable-vX.X.X.zip`（或对应平台版本）
+3. 解压到任意目录
+4. 双击 `GameSave.exe` 即可运行，无需安装！
+
+### 方式三：从源码构建
 
 ```powershell
 # 克隆项目
@@ -152,6 +159,9 @@ dotnet run --project src/GameSave/GameSave.csproj
 
 # 或构建 MSI 安装包
 .\build-msi.ps1 -Platform x64 -Version 1.0.0
+
+# 或构建便携版 ZIP
+.\build-portable.ps1 -Platform x64 -Version 1.0.0
 ```
 
 ---
@@ -248,6 +258,7 @@ dotnet run --project src/GameSave/GameSave.csproj
 | [开机自启动](docs/开机自启动.md) | 开机自启动配置与原理 |
 | [数据导入导出](docs/数据导入导出.md) | 游戏配置与存档的导入导出 |
 | [MSI 打包指南](docs/MSI打包指南.md) | MSI 安装包构建流程 |
+| [便携版打包指南](docs/便携版打包指南.md) | 便携版 ZIP 构建流程 |
 
 ---
 

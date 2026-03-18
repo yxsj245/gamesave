@@ -36,8 +36,43 @@ public class AppConfig
 /// </summary>
 public class ConfigService
 {
+    /// <summary>
+    /// 便携版工作目录命令行参数名
+    /// </summary>
+    private const string PortableWorkDirArg = "--portable-workdir";
 
+    /// <summary>
+    /// 缓存的便携版工作目录路径（null 表示未解析，空字符串表示非便携模式）
+    /// </summary>
+    private static string? _portableWorkDir;
 
+    /// <summary>
+    /// 是否为便携版模式
+    /// 通过检测命令行参数 --portable-workdir 来判断
+    /// </summary>
+    public static bool IsPortableMode => !string.IsNullOrEmpty(GetPortableWorkDir());
+
+    /// <summary>
+    /// 获取便携版的工作目录路径（由启动器通过命令行参数传入）
+    /// 返回空字符串表示非便携模式
+    /// </summary>
+    public static string GetPortableWorkDir()
+    {
+        if (_portableWorkDir != null)
+            return _portableWorkDir;
+
+        _portableWorkDir = string.Empty;
+        var args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(PortableWorkDirArg, StringComparison.OrdinalIgnoreCase))
+            {
+                _portableWorkDir = args[i + 1];
+                break;
+            }
+        }
+        return _portableWorkDir;
+    }
 
     private AppConfig _config = new();
     private string _configFilePath = string.Empty;
@@ -86,9 +121,14 @@ public class ConfigService
 
     /// <summary>
     /// 获取默认工作目录路径
+    /// 便携版模式下返回启动器传入的工作目录，普通安装模式返回用户目录
     /// </summary>
     public static string GetDefaultWorkDirectory()
     {
+        if (IsPortableMode)
+        {
+            return GetPortableWorkDir();
+        }
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(userProfile, "xingchen", "ycyaw", ".gamesave");
     }
@@ -101,9 +141,10 @@ public class ConfigService
     {
         var defaultWorkDir = GetDefaultWorkDirectory();
 
-        // 确保默认目录存在（config.json 始终在此处）
+        // 确保默认目录存在
         Directory.CreateDirectory(defaultWorkDir);
 
+        // 便携版模式下 config.json 保存在 AppData 子目录中，与数据一起便携
         _configFilePath = Path.Combine(defaultWorkDir, "config.json");
 
         if (File.Exists(_configFilePath))
