@@ -45,6 +45,7 @@ public static class AutoStartService
     /// <summary>
     /// 启用开机自启动（写入注册表）
     /// 启动参数包含 --silent，使应用启动后直接进入后台托盘
+    /// 便携模式下额外包含 --portable-workdir 参数，确保使用正确的工作目录
     /// </summary>
     public static bool Enable()
     {
@@ -56,8 +57,17 @@ public static class AutoStartService
             using var key = Registry.CurrentUser.OpenSubKey(RunRegistryKey, true);
             if (key == null) return false;
 
-            // 带 --silent 参数启动，进入后台托盘模式
-            key.SetValue(AppName, $"\"{exePath}\" {SilentArg}");
+            // 构建启动命令
+            var cmdLine = $"\"{exePath}\" {SilentArg}";
+
+            // 便携模式下，需要在开机自启命令中包含工作目录参数
+            if (ConfigService.IsPortableMode)
+            {
+                var workDir = ConfigService.GetPortableWorkDir();
+                cmdLine = $"\"{exePath}\" {SilentArg} --portable-workdir \"{workDir}\"";
+            }
+
+            key.SetValue(AppName, cmdLine);
             return true;
         }
         catch

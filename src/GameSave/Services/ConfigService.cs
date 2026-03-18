@@ -160,8 +160,23 @@ public class ConfigService
                 await SaveConfigAsync();
             }
 
-            // 确保实际工作目录存在
-            Directory.CreateDirectory(_config.WorkDirectory);
+            // 确保实际工作目录存在，如果不可用则回滚到默认目录
+            try
+            {
+                Directory.CreateDirectory(_config.WorkDirectory);
+            }
+            catch (Exception ex) when (ex is DirectoryNotFoundException
+                                    || ex is IOException
+                                    || ex is UnauthorizedAccessException
+                                    || ex is NotSupportedException)
+            {
+                // 工作目录不可用（例如映射盘符丢失），回滚到默认工作目录
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ConfigService] 工作目录 '{_config.WorkDirectory}' 不可用（{ex.GetType().Name}: {ex.Message}），已回滚到默认目录: {defaultWorkDir}");
+                _config.WorkDirectory = defaultWorkDir;
+                Directory.CreateDirectory(defaultWorkDir);
+                await SaveConfigAsync();
+            }
         }
         else
         {
