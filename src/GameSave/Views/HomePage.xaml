@@ -85,6 +85,16 @@
         <CommandBar DefaultLabelPosition="Right"
                     Background="Transparent"
                     Grid.Row="0" Margin="0,0,0,12">
+            <CommandBar.Content>
+                <AutoSuggestBox x:Name="SearchBox"
+                                PlaceholderText="搜索游戏..."
+                                QueryIcon="Find"
+                                Width="220"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                TextChanged="SearchBox_TextChanged"
+                                QuerySubmitted="SearchBox_QuerySubmitted"/>
+            </CommandBar.Content>
             <AppBarButton Label="添加游戏" Click="AddGame_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE710;" />
@@ -111,7 +121,7 @@
         <!-- 游戏列表 -->
         <ListView Grid.Row="1"
                   x:Name="GamesList"
-                  ItemsSource="{x:Bind ViewModel.Games, Mode=OneWay}"
+                  ItemsSource="{x:Bind ViewModel.FilteredGames, Mode=OneWay}"
                   SelectionMode="None"
                   Tapped="GamesList_Tapped"
                   HorizontalAlignment="Stretch">

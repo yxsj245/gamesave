@@ -58,9 +58,37 @@ namespace GameSave.Views
         /// <summary>更新空状态提示的可见性</summary>
         private void UpdateEmptyState()
         {
-            EmptyStatePanel.Visibility = ViewModel.Games.Count == 0
-                ? Microsoft.UI.Xaml.Visibility.Visible
-                : Microsoft.UI.Xaml.Visibility.Collapsed;
+            if (ViewModel.Games.Count == 0)
+            {
+                // 没有任何游戏
+                EmptyStatePanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                // 恢复默认提示文本
+                if (EmptyStatePanel.Children.Count >= 2 && EmptyStatePanel.Children[1] is TextBlock titleText)
+                {
+                    titleText.Text = "还没有添加任何游戏";
+                }
+                if (EmptyStatePanel.Children.Count >= 3 && EmptyStatePanel.Children[2] is TextBlock subtitleText)
+                {
+                    subtitleText.Text = "点击上方「添加游戏」开始管理你的存档";
+                }
+            }
+            else if (ViewModel.FilteredGames.Count == 0)
+            {
+                // 有游戏但搜索无结果
+                EmptyStatePanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                if (EmptyStatePanel.Children.Count >= 2 && EmptyStatePanel.Children[1] is TextBlock titleText)
+                {
+                    titleText.Text = "未找到匹配的游戏";
+                }
+                if (EmptyStatePanel.Children.Count >= 3 && EmptyStatePanel.Children[2] is TextBlock subtitleText)
+                {
+                    subtitleText.Text = "请尝试其他关键字";
+                }
+            }
+            else
+            {
+                EmptyStatePanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
         }
 
         #region 详情浮层动画
@@ -87,6 +115,28 @@ namespace GameSave.Views
             {
                 DetailsOverlay.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
+        }
+
+        #endregion
+
+        #region 搜索游戏
+
+        /// <summary>搜索框文本变化时实时过滤游戏列表</summary>
+        private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            // 仅处理用户输入引起的文本变更
+            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                ViewModel.SearchKeyword = sender.Text;
+                UpdateEmptyState();
+            }
+        }
+
+        /// <summary>搜索框提交查询</summary>
+        private void SearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+        {
+            ViewModel.SearchKeyword = args.QueryText;
+            UpdateEmptyState();
         }
 
         #endregion
@@ -258,8 +308,7 @@ namespace GameSave.Views
 
                 var pathBox = new TextBox
                 {
-                    PlaceholderText = "选择游戏存档所在的目录",
-                    IsReadOnly = true,
+                    PlaceholderText = "输入路径或点击浏览选择目录",
                     Text = initialPath
                 };
                 Grid.SetColumn(pathBox, 0);
@@ -351,8 +400,7 @@ namespace GameSave.Views
             var processPathBox = new TextBox
             {
                 Header = "游戏启动进程（可选）",
-                PlaceholderText = "选择游戏可执行文件",
-                IsReadOnly = true
+                PlaceholderText = "输入路径或点击浏览选择文件"
             };
             Grid.SetColumn(processPathBox, 0);
 
@@ -693,10 +741,15 @@ namespace GameSave.Views
                 var savePathBox = new TextBox
                 {
                     Header = "游戏存档目录 *",
-                    PlaceholderText = "请选择游戏存档目录",
-                    IsReadOnly = true
+                    PlaceholderText = "输入路径或点击浏览选择目录"
                 };
                 Grid.SetColumn(savePathBox, 0);
+
+                // 手动输入时同步更新 detected.SaveFolderPath
+                savePathBox.TextChanged += (s, args) =>
+                {
+                    detected.SaveFolderPath = savePathBox.Text;
+                };
 
                 var browseSaveBtn = new Button
                 {
@@ -1426,8 +1479,7 @@ namespace GameSave.Views
 
                 var pathBox = new TextBox
                 {
-                    PlaceholderText = "选择游戏存档所在的目录",
-                    IsReadOnly = true,
+                    PlaceholderText = "输入路径或点击浏览选择目录",
                     Text = initialPath
                 };
                 Grid.SetColumn(pathBox, 0);
@@ -1523,8 +1575,7 @@ namespace GameSave.Views
             var processPathBox = new TextBox
             {
                 Header = "游戏启动进程（可选）",
-                PlaceholderText = "选择游戏可执行文件",
-                IsReadOnly = true,
+                PlaceholderText = "输入路径或点击浏览选择文件",
                 Text = game.ProcessPath ?? string.Empty
             };
             Grid.SetColumn(processPathBox, 0);

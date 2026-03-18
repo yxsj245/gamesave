@@ -42,6 +42,28 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _games, value);
     }
 
+    // 过滤后的游戏列表（用于 ListView 绑定）
+    private ObservableCollection<Game> _filteredGames = new();
+    public ObservableCollection<Game> FilteredGames
+    {
+        get => _filteredGames;
+        set => SetProperty(ref _filteredGames, value);
+    }
+
+    // 搜索关键字
+    private string _searchKeyword = string.Empty;
+    public string SearchKeyword
+    {
+        get => _searchKeyword;
+        set
+        {
+            if (SetProperty(ref _searchKeyword, value))
+            {
+                ApplySearchFilter();
+            }
+        }
+    }
+
     private Game? _selectedGame;
     public Game? SelectedGame
     {
@@ -210,6 +232,37 @@ public partial class MainViewModel : BaseViewModel
         {
             Games.Add(game);
         }
+        ApplySearchFilter();
+    }
+
+    /// <summary>
+    /// 根据搜索关键字过滤游戏列表
+    /// </summary>
+    public void ApplySearchFilter()
+    {
+        FilteredGames.Clear();
+
+        var keyword = SearchKeyword?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(keyword))
+        {
+            // 无搜索关键字，显示全部
+            foreach (var game in Games)
+            {
+                FilteredGames.Add(game);
+            }
+        }
+        else
+        {
+            // 按游戏名称模糊匹配（忽略大小写）
+            foreach (var game in Games)
+            {
+                if (game.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    FilteredGames.Add(game);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -328,6 +381,7 @@ public partial class MainViewModel : BaseViewModel
 
             await _gameService.AddGameAsync(game);
             Games.Add(game);
+            ApplySearchFilter();
 
             ResetAddGameForm();
             StatusMessage = $"游戏 \"{game.Name}\" 添加成功！";
@@ -393,6 +447,7 @@ public partial class MainViewModel : BaseViewModel
 
                     await _gameService.AddGameAsync(game);
                     Games.Add(game);
+                    ApplySearchFilter();
                     successCount++;
                 }
                 catch (Exception ex)
@@ -455,6 +510,7 @@ public partial class MainViewModel : BaseViewModel
             if (index >= 0)
             {
                 Games[index] = game;
+                ApplySearchFilter();
             }
 
             // 更新定时备份状态：对于无启动进程的游戏，更新配置后重新启停定时备份
@@ -945,6 +1001,7 @@ public partial class MainViewModel : BaseViewModel
             }
 
             Games.Remove(gameToDelete);
+            ApplySearchFilter();
             await _gameService.DeleteGameAsync(gameToDelete);
 
             var msg = deleteCloudSaves && !string.IsNullOrEmpty(gameToDelete.CloudConfigId)

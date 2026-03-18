@@ -1,6 +1,7 @@
 using GameSave.Helpers;
 using GameSave.Services;
 using Microsoft.UI.Xaml.Navigation;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
 namespace GameSave
@@ -28,6 +29,11 @@ namespace GameSave
         /// 标记是否真正退出应用（而非最小化到托盘）
         /// </summary>
         private bool _isExiting = false;
+
+        /// <summary>
+        /// 命名管道监听取消令牌，用于在应用退出时停止监听
+        /// </summary>
+        private CancellationTokenSource? _pipeCts;
 
         /// <summary>
         /// 标记是否首次最小化到托盘（用于只显示一次气泡提示）
@@ -126,8 +132,13 @@ namespace GameSave
             {
                 m_window.Activate();
             }
+
+            // 启动命名管道监听器，接收来自第二个实例的 "显示窗口" 请求
+            StartPipeListener();
 #else
             m_window.Activate();
+            // 调试模式下也启动命名管道监听器
+            StartPipeListener();
 #endif
         }
 
@@ -203,6 +214,9 @@ namespace GameSave
         private void OnTrayExit()
         {
             _isExiting = true;
+
+            // 停止命名管道监听
+            StopPipeListener();
 
             // 清理托盘图标
             _trayIcon?.Dispose();
@@ -422,5 +436,77 @@ namespace GameSave
         {
             throw new Exception("页面导航失败: " + e.SourcePageType.FullName);
         }
+
+        #region 单实例命名管道监听
+
+        /// <summary>
+        /// 启动命名管道监听器，在后台线程持续等待来自第二个实例的消息
+        /// 收到 "SHOW" 消息后，在 UI 线程上将主窗口前置显示
+        /// </summary>
+        private void StartPipeListener()
+        {
+            _pipeCts = new CancellationTokenSource();
+            var token = _pipeCts.Token;
+
+            Task.Run(async () =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        using var server = new NamedPipeServerStream(
+                            Program.PipeName,
+                            PipeDirection.In,
+                            NamedPipeServerStream.MaxAllowedServerInstances,
+                            PipeTransmissionMode.Byte,
+                            PipeOptions.Asynchronous);
+
+                        // 异步等待客户端连接，支持取消
+                        await server.WaitForConnectionAsync(token);
+
+                        using var reader = new StreamReader(server);
+                        var message = await reader.ReadToEndAsync(token);
+
+                        if (message?.Trim() == "SHOW")
+                        {
+                            // 切换到 UI 线程显示窗口
+                            m_window?.DispatcherQueue?.TryEnqueue(() =>
+                            {
+                                ShowMainWindow();
+                            });
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // 正常取消，退出循环
+                        break;
+                    }
+                    catch
+                    {
+                        // 管道连接异常，短暂等待后重试
+                        if (!token.IsCancellationRequested)
+                        {
+                            try { await Task.Delay(500, token); } catch { break; }
+                        }
+                    }
+                }
+            }, token);
+        }
+
+        /// <summary>
+        /// 停止命名管道监听器
+        /// </summary>
+        private void StopPipeListener()
+        {
+            try
+            {
+                _pipeCts?.Cancel();
+                _pipeCts?.Dispose();
+                _pipeCts = null;
+            }
+            catch { }
+        }
+
+        #endregion
     }
 }
