@@ -131,12 +131,36 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     /// <summary>
+    /// 工作目录是否被启动参数锁定（锁定时不可更改）
+    /// </summary>
+    private bool _isWorkDirLocked;
+    public bool IsWorkDirLocked
+    {
+        get => _isWorkDirLocked;
+        set => SetProperty(ref _isWorkDirLocked, value);
+    }
+
+    /// <summary>
+    /// 工作目录锁定原因提示文本
+    /// </summary>
+    private string _workDirLockReason = string.Empty;
+    public string WorkDirLockReason
+    {
+        get => _workDirLockReason;
+        set => SetProperty(ref _workDirLockReason, value);
+    }
+
+    /// <summary>
     /// 初始化加载当前工作目录、云配置和主题设置
     /// </summary>
     public void LoadSettings()
     {
         WorkDirectory = _configService.WorkDirectory;
         LoadCloudConfigs();
+
+        // 加载工作目录锁定状态
+        IsWorkDirLocked = ConfigService.IsWorkDirLockedByArgs;
+        WorkDirLockReason = IsWorkDirLocked ? "工作目录由启动参数 --workdir 指定，无法在此更改" : string.Empty;
 
         // 加载当前主题设置（直接设置字段避免触发 setter 中的保存操作）
         _selectedThemeIndex = ThemeModeToIndex(_configService.ThemeMode);

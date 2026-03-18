@@ -60,8 +60,14 @@ public static class AutoStartService
             // 构建启动命令
             var cmdLine = $"\"{exePath}\" {SilentArg}";
 
+            // --workdir 参数具有最高优先级，需要透传到开机自启命令中
+            var cmdWorkDir = ConfigService.GetCommandLineWorkDir();
+            if (!string.IsNullOrEmpty(cmdWorkDir))
+            {
+                cmdLine = $"\"{exePath}\" {SilentArg} --workdir \"{cmdWorkDir}\"";
+            }
             // 便携模式下，需要在开机自启命令中包含工作目录参数
-            if (ConfigService.IsPortableMode)
+            else if (ConfigService.IsPortableMode)
             {
                 var workDir = ConfigService.GetPortableWorkDir();
                 cmdLine = $"\"{exePath}\" {SilentArg} --portable-workdir \"{workDir}\"";

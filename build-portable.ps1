@@ -233,11 +233,34 @@ namespace GameSaveLauncher
                 // 确保便携版工作目录存在
                 Directory.CreateDirectory(portableWorkDir);
 
+                // 构建启动参数：默认包含便携版工作目录参数
+                string arguments = "--portable-workdir \"" + portableWorkDir + "\"";
+
+                // 检查用户是否通过命令行传入了 --workdir 参数，如果有则透传（优先级最高）
+                for (int i = 0; i < args.Length - 1; i++)
+                {
+                    if (args[i].Equals("--workdir", StringComparison.OrdinalIgnoreCase))
+                    {
+                        arguments += " --workdir \"" + args[i + 1] + "\"";
+                        break;
+                    }
+                }
+
+                // 检查是否有 --silent 参数（用于开机自启等场景）
+                for (int i = 0; i < args.Length; i++)
+                {
+                    if (args[i].Equals("--silent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        arguments += " --silent";
+                        break;
+                    }
+                }
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = targetExe,
-                    // 通过命令行参数告诉应用便携版工作目录在哪里
-                    Arguments = "--portable-workdir \"" + portableWorkDir + "\"",
+                    // 通过命令行参数告诉应用便携版工作目录和其他参数
+                    Arguments = arguments,
                     WorkingDirectory = appDir,
                     UseShellExecute = true
                 };

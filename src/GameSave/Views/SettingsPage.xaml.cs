@@ -24,6 +24,13 @@ namespace GameSave.Views
             ViewModel.LoadSettings();
             _isLoadingSettings = false;
             UpdateNoConfigHint();
+
+            // 检查工作目录是否被启动参数锁定
+            if (ViewModel.IsWorkDirLocked)
+            {
+                ChangeWorkDirButton.IsEnabled = false;
+                WorkDirLockHint.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            }
         }
 
         /// <summary>
@@ -88,6 +95,9 @@ namespace GameSave.Views
 
         private async void ChangeWorkDir_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
+            // 双重保险：如果工作目录被启动参数锁定，不允许更改
+            if (ViewModel.IsWorkDirLocked) return;
+
             var picker = new Windows.Storage.Pickers.FolderPicker();
             picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             picker.FileTypeFilter.Add("*");

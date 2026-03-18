@@ -42,15 +42,52 @@ public class ConfigService
     private const string PortableWorkDirArg = "--portable-workdir";
 
     /// <summary>
+    /// 通用工作目录命令行参数名（优先级最高）
+    /// </summary>
+    private const string WorkDirArg = "--workdir";
+
+    /// <summary>
     /// 缓存的便携版工作目录路径（null 表示未解析，空字符串表示非便携模式）
     /// </summary>
     private static string? _portableWorkDir;
+
+    /// <summary>
+    /// 缓存的命令行 --workdir 参数路径（null 表示未解析，空字符串表示未指定）
+    /// </summary>
+    private static string? _commandLineWorkDir;
 
     /// <summary>
     /// 是否为便携版模式
     /// 通过检测命令行参数 --portable-workdir 来判断
     /// </summary>
     public static bool IsPortableMode => !string.IsNullOrEmpty(GetPortableWorkDir());
+
+    /// <summary>
+    /// 工作目录是否由启动参数 --workdir 锁定（锁定时 UI 不可更改）
+    /// </summary>
+    public static bool IsWorkDirLockedByArgs => !string.IsNullOrEmpty(GetCommandLineWorkDir());
+
+    /// <summary>
+    /// 获取命令行 --workdir 参数指定的工作目录路径
+    /// 返回空字符串表示未通过 --workdir 参数指定
+    /// </summary>
+    public static string GetCommandLineWorkDir()
+    {
+        if (_commandLineWorkDir != null)
+            return _commandLineWorkDir;
+
+        _commandLineWorkDir = string.Empty;
+        var args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(WorkDirArg, StringComparison.OrdinalIgnoreCase))
+            {
+                _commandLineWorkDir = args[i + 1];
+                break;
+            }
+        }
+        return _commandLineWorkDir;
+    }
 
     /// <summary>
     /// 获取便携版的工作目录路径（由启动器通过命令行参数传入）
@@ -186,6 +223,14 @@ public class ConfigService
                 WorkDirectory = defaultWorkDir
             };
             await SaveConfigAsync();
+        }
+
+        // --workdir 参数具有最高优先级，覆盖所有其他工作目录设置
+        // 注意：不写入 config.json，仅在运行时生效
+        var cmdWorkDir = GetCommandLineWorkDir();
+        if (!string.IsNullOrEmpty(cmdWorkDir))
+        {
+            _config.WorkDirectory = cmdWorkDir;
         }
     }
 

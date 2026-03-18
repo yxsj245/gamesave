@@ -15,6 +15,8 @@ namespace GameSave
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
 
         private const int SW_HIDE = 0;
         private const int SW_RESTORE = 9;
@@ -71,6 +73,19 @@ namespace GameSave
         {
             // 初始化配置服务（加载主题设置等）
             await ConfigService.InitializeAsync();
+
+            // 如果通过 --workdir 参数指定了工作目录，检查该目录是否存在
+            if (ConfigService.IsWorkDirLockedByArgs && !Directory.Exists(ConfigService.WorkDirectory))
+            {
+                // 使用 Win32 MessageBox（此时 WinUI 窗口尚未初始化，无法使用 ContentDialog）
+                MessageBoxW(
+                    IntPtr.Zero,
+                    $"启动参数 --workdir 指定的工作目录不存在：\n\n{ConfigService.WorkDirectory}\n\n请检查路径是否正确后重试。",
+                    "GameSave Manager - 工作目录错误",
+                    0x00000010 /* MB_ICONERROR */);
+                Environment.Exit(1);
+                return;
+            }
 
             // 检测是否为静默启动模式（开机自启时使用）
             bool isSilentStart = Services.AutoStartService.IsSilentStart();
