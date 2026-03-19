@@ -77,10 +77,12 @@ public class LocalStorageService : IStorageService
         if (resolvedPaths.Count == 0)
             throw new InvalidOperationException("未设置游戏存档目录");
 
-        // 检查至少一个存档目录存在且有文件
-        bool anyHasFiles = resolvedPaths.Any(p => Directory.Exists(p) && DirectoryHasFiles(p));
+        // 检查至少一个存档路径存在且有文件（目录有文件或文件路径存在）
+        bool anyHasFiles = resolvedPaths.Any(p =>
+            (Directory.Exists(p) && DirectoryHasFiles(p)) ||
+            (File.Exists(p) && !Directory.Exists(p)));
         if (!anyHasFiles)
-            throw new InvalidOperationException("所有存档目录下都没有可备份的文件");
+            throw new InvalidOperationException("所有存档路径下都没有可备份的文件");
 
         var gameWorkDir = _configService.GetGameWorkDirectory(game.Id);
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -93,16 +95,33 @@ public class LocalStorageService : IStorageService
             var snapshotDir = Path.Combine(gameWorkDir, TempSnapshotDirName);
             try
             {
-                // 为每个存档目录创建独立的快照子目录
+                // 为每个存档路径创建独立的快照
                 var snapshotDirs = new List<string>();
                 for (int i = 0; i < resolvedPaths.Count; i++)
                 {
-                    if (!Directory.Exists(resolvedPaths[i])) continue;
-                    var subSnapshotDir = resolvedPaths.Count == 1
-                        ? snapshotDir
-                        : Path.Combine(snapshotDir, i.ToString());
-                    CopyDirectoryRecursive(resolvedPaths[i], subSnapshotDir);
-                    snapshotDirs.Add(subSnapshotDir);
+                    var resolvedPath = resolvedPaths[i];
+                    if (Directory.Exists(resolvedPath))
+                    {
+                        // 目录：递归复制
+                        var subSnapshotDir = resolvedPaths.Count == 1
+                            ? snapshotDir
+                            : Path.Combine(snapshotDir, i.ToString());
+                        CopyDirectoryRecursive(resolvedPath, subSnapshotDir);
+                        snapshotDirs.Add(subSnapshotDir);
+                    }
+                    else if (File.Exists(resolvedPath))
+                    {
+                        // 单文件：复制到快照目录
+                        var subSnapshotDir = resolvedPaths.Count == 1
+                            ? snapshotDir
+                            : Path.Combine(snapshotDir, i.ToString());
+                        Directory.CreateDirectory(subSnapshotDir);
+                        var destFile = Path.Combine(subSnapshotDir, Path.GetFileName(resolvedPath));
+                        using var sourceStream = new FileStream(resolvedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        using var destStream = new FileStream(destFile, FileMode.Create, FileAccess.Write);
+                        sourceStream.CopyTo(destStream);
+                        snapshotDirs.Add(subSnapshotDir);
+                    }
                 }
 
                 // 打包快照目录
@@ -129,9 +148,9 @@ public class LocalStorageService : IStorageService
         }
         else
         {
-            // 直接模式：从原目录直接打包
+            // 直接模式：从原路径直接打包（支持目录和文件混合）
             System.Diagnostics.Debug.WriteLine($"[备份] 使用直接模式打包（游戏未运行）: {game.Name}");
-            var existingPaths = resolvedPaths.Where(Directory.Exists).ToList();
+            var existingPaths = resolvedPaths.Where(p => Directory.Exists(p) || File.Exists(p)).ToList();
             await TarHelper.CreateTarFromMultipleAsync(existingPaths, tarFilePath, progress);
         }
 
@@ -171,7 +190,7 @@ public class LocalStorageService : IStorageService
         if (resolvedPaths.Count == 0)
             throw new InvalidOperationException("未设置游戏存档目录");
 
-        // 检测所有存档目录文件是否被其他进程占用
+        // 检测所有存档路径的文件是否被其他进程占用
         foreach (var path in resolvedPaths)
         {
             if (Directory.Exists(path))
@@ -185,9 +204,22 @@ public class LocalStorageService : IStorageService
                 // 清空游戏存档目录
                 ClearDirectory(path);
             }
+            else if (File.Exists(path))
+            {
+                // 单文件路径：检查文件是否被占用并删除
+                try
+                {
+                    using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch (IOException)
+                {
+                    throw new IOException($"检测到存档文件被进程占用（{path}），请退出游戏后还原，避免存档损坏");
+                }
+                File.Delete(path);
+            }
         }
 
-        // 解压 .tar 到游戏存档目录
+        // 解压 .tar 到游戏存档路径
         await TarHelper.ExtractTarToMultipleAsync(saveFile.Path, resolvedPaths, progress);
     }
 

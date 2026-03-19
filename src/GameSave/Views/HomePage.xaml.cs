@@ -286,7 +286,7 @@ namespace GameSave.Views
                     Children =
                     {
                         new FontIcon { Glyph = "\uE710", FontSize = 12 },
-                        new TextBlock { Text = "添加目录", FontSize = 12 }
+                        new TextBlock { Text = "添加路径", FontSize = 12 }
                     }
                 },
                 Padding = new Microsoft.UI.Xaml.Thickness(8, 4, 8, 4)
@@ -305,17 +305,19 @@ namespace GameSave.Views
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 var pathBox = new TextBox
                 {
-                    PlaceholderText = "输入路径或点击浏览选择目录",
+                    PlaceholderText = "输入路径或点击浏览选择目录/文件",
                     Text = initialPath
                 };
                 Grid.SetColumn(pathBox, 0);
 
+                // 选择文件夹按钮
                 var browseBtn = new Button
                 {
-                    Content = "浏览",
+                    Content = "文件夹",
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
                     Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
                 };
@@ -331,10 +333,50 @@ namespace GameSave.Views
                     var folder = await picker.PickSingleFolderAsync();
                     if (folder != null)
                     {
-                        pathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                        var folderPath = folder.Path;
+                        // 校验：选择的文件夹不能包含已选择的文件
+                        var conflict = ValidateFolderAgainstFiles(folderPath, savePathRows, pathBox);
+                        if (conflict != null)
+                        {
+                            await ShowMessageAsync("路径冲突", conflict);
+                            return;
+                        }
+                        pathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(folderPath);
                     }
                 };
                 Grid.SetColumn(browseBtn, 1);
+
+                // 选择文件按钮
+                var browseFileBtn = new Button
+                {
+                    Content = "文件",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
+                };
+                browseFileBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var file = await picker.PickSingleFileAsync();
+                    if (file != null)
+                    {
+                        var filePath = file.Path;
+                        // 校验：选择的文件不能在已选择的文件夹内
+                        var conflict = ValidateFileAgainstFolders(filePath, savePathRows, pathBox);
+                        if (conflict != null)
+                        {
+                            await ShowMessageAsync("路径冲突", conflict);
+                            return;
+                        }
+                        pathBox.Text = PathEnvironmentHelper.ReplaceWithEnvVariables(filePath);
+                    }
+                };
+                Grid.SetColumn(browseFileBtn, 2);
 
                 var removeBtn = new Button
                 {
@@ -357,17 +399,18 @@ namespace GameSave.Views
                     if (savePathRows.Count == 1)
                     {
                         var lastRow = savePathRows[0].row;
-                        // 找到删除按钮（第三个子元素）
-                        if (lastRow.Children.Count >= 3)
+                        // 找到删除按钮（第四个子元素，索引3）
+                        if (lastRow.Children.Count >= 4)
                         {
-                            ((FrameworkElement)lastRow.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                            ((FrameworkElement)lastRow.Children[3]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                         }
                     }
                 };
-                Grid.SetColumn(removeBtn, 2);
+                Grid.SetColumn(removeBtn, 3);
 
                 rowGrid.Children.Add(pathBox);
                 rowGrid.Children.Add(browseBtn);
+                rowGrid.Children.Add(browseFileBtn);
                 rowGrid.Children.Add(removeBtn);
 
                 savePathsContainer.Children.Add(rowGrid);
@@ -378,9 +421,9 @@ namespace GameSave.Views
                 {
                     foreach (var (row, _) in savePathRows)
                     {
-                        if (row.Children.Count >= 3)
+                        if (row.Children.Count >= 4)
                         {
-                            ((FrameworkElement)row.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                            ((FrameworkElement)row.Children[3]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                         }
                     }
                 }
@@ -737,11 +780,12 @@ namespace GameSave.Views
                 var savePathPanel = new Grid();
                 savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                savePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 var savePathBox = new TextBox
                 {
                     Header = "游戏存档目录 *",
-                    PlaceholderText = "输入路径或点击浏览选择目录"
+                    PlaceholderText = "输入路径或点击浏览选择目录/文件"
                 };
                 Grid.SetColumn(savePathBox, 0);
 
@@ -753,7 +797,7 @@ namespace GameSave.Views
 
                 var browseSaveBtn = new Button
                 {
-                    Content = "浏览",
+                    Content = "文件夹",
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
                     Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
                 };
@@ -775,8 +819,34 @@ namespace GameSave.Views
                 };
                 Grid.SetColumn(browseSaveBtn, 1);
 
+                // 选择文件按钮
+                var browseSaveFileBtn = new Button
+                {
+                    Content = "文件",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
+                };
+                browseSaveFileBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var file = await picker.PickSingleFileAsync();
+                    if (file != null)
+                    {
+                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(file.Path);
+                        detected.SaveFolderPath = savePathBox.Text;
+                    }
+                };
+                Grid.SetColumn(browseSaveFileBtn, 2);
+
                 savePathPanel.Children.Add(savePathBox);
                 savePathPanel.Children.Add(browseSaveBtn);
+                savePathPanel.Children.Add(browseSaveFileBtn);
                 contentPanel.Children.Add(savePathPanel);
 
                 // 启动参数
@@ -1476,17 +1546,19 @@ namespace GameSave.Views
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
                 var pathBox = new TextBox
                 {
-                    PlaceholderText = "输入路径或点击浏览选择目录",
+                    PlaceholderText = "输入路径或点击浏览选择目录/文件",
                     Text = initialPath
                 };
                 Grid.SetColumn(pathBox, 0);
 
+                // 选择文件夹按钮
                 var browseBtn = new Button
                 {
-                    Content = "浏览",
+                    Content = "文件夹",
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
                     Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
                 };
@@ -1502,10 +1574,50 @@ namespace GameSave.Views
                     var folder = await picker.PickSingleFolderAsync();
                     if (folder != null)
                     {
-                        pathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                        var folderPath = folder.Path;
+                        // 校验：选择的文件夹不能包含已选择的文件
+                        var conflict = ValidateFolderAgainstFiles(folderPath, editSavePathRows, pathBox);
+                        if (conflict != null)
+                        {
+                            await ShowMessageAsync("路径冲突", conflict);
+                            return;
+                        }
+                        pathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folderPath);
                     }
                 };
                 Grid.SetColumn(browseBtn, 1);
+
+                // 选择文件按钮
+                var browseFileBtn = new Button
+                {
+                    Content = "文件",
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                    Margin = new Microsoft.UI.Xaml.Thickness(4, 0, 0, 0)
+                };
+                browseFileBtn.Click += async (s, args) =>
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                    picker.FileTypeFilter.Add("*");
+
+                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                    var file = await picker.PickSingleFileAsync();
+                    if (file != null)
+                    {
+                        var filePath = file.Path;
+                        // 校验：选择的文件不能在已选择的文件夹内
+                        var conflict = ValidateFileAgainstFolders(filePath, editSavePathRows, pathBox);
+                        if (conflict != null)
+                        {
+                            await ShowMessageAsync("路径冲突", conflict);
+                            return;
+                        }
+                        pathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(filePath);
+                    }
+                };
+                Grid.SetColumn(browseFileBtn, 2);
 
                 var removeBtn = new Button
                 {
@@ -1525,16 +1637,17 @@ namespace GameSave.Views
                     if (editSavePathRows.Count == 1)
                     {
                         var lastRow = editSavePathRows[0].row;
-                        if (lastRow.Children.Count >= 3)
+                        if (lastRow.Children.Count >= 4)
                         {
-                            ((FrameworkElement)lastRow.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                            ((FrameworkElement)lastRow.Children[3]).Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                         }
                     }
                 };
-                Grid.SetColumn(removeBtn, 2);
+                Grid.SetColumn(removeBtn, 3);
 
                 rowGrid.Children.Add(pathBox);
                 rowGrid.Children.Add(browseBtn);
+                rowGrid.Children.Add(browseFileBtn);
                 rowGrid.Children.Add(removeBtn);
 
                 editSavePathsContainer.Children.Add(rowGrid);
@@ -1544,9 +1657,9 @@ namespace GameSave.Views
                 {
                     foreach (var (row, _) in editSavePathRows)
                     {
-                        if (row.Children.Count >= 3)
+                        if (row.Children.Count >= 4)
                         {
-                            ((FrameworkElement)row.Children[2]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                            ((FrameworkElement)row.Children[3]).Visibility = Microsoft.UI.Xaml.Visibility.Visible;
                         }
                     }
                 }
@@ -1848,6 +1961,102 @@ namespace GameSave.Views
                     await ShowMessageAsync("删除失败", message);
                 }
             }
+        }
+
+        #endregion
+
+        #region 存档路径冲突校验
+
+        /// <summary>
+        /// 校验选择的文件是否位于已选择的文件夹内
+        /// 如果存在冲突，返回冲突提示信息；否则返回 null
+        /// </summary>
+        /// <param name="filePath">新选择的文件绝对路径</param>
+        /// <param name="pathRows">当前所有路径行</param>
+        /// <param name="currentPathBox">当前行的文本框（排除自身）</param>
+        private static string? ValidateFileAgainstFolders(string filePath, List<(Grid row, TextBox textBox)> pathRows, TextBox currentPathBox)
+        {
+            var normalizedFile = Path.GetFullPath(filePath).TrimEnd('\\', '/');
+
+            foreach (var (_, textBox) in pathRows)
+            {
+                // 跳过当前行自身
+                if (ReferenceEquals(textBox, currentPathBox))
+                    continue;
+
+                var existingPath = textBox.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(existingPath))
+                    continue;
+
+                // 展开环境变量后再比较
+                var expandedPath = PathEnvironmentHelper.ExpandEnvVariables(existingPath);
+                var normalizedExisting = Path.GetFullPath(expandedPath).TrimEnd('\\', '/');
+
+                // 检查 existingPath 是否是一个目录（通过 Path.HasExtension 和 Directory.Exists 综合判断）
+                bool isExistingDir = Directory.Exists(expandedPath) ||
+                    (!File.Exists(expandedPath) && !Path.HasExtension(expandedPath));
+
+                if (isExistingDir)
+                {
+                    // 检查文件是否在该目录下
+                    var dirWithSep = normalizedExisting + Path.DirectorySeparatorChar;
+                    if (normalizedFile.StartsWith(dirWithSep, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return $"选择的文件位于已添加的文件夹内，会导致备份冲突：\n\n" +
+                               $"文件: {filePath}\n" +
+                               $"文件夹: {existingPath}\n\n" +
+                               $"请选择该文件夹外的文件，或移除已添加的文件夹。";
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 校验选择的文件夹是否包含已选择的文件
+        /// 如果存在冲突，返回冲突提示信息；否则返回 null
+        /// </summary>
+        /// <param name="folderPath">新选择的文件夹绝对路径</param>
+        /// <param name="pathRows">当前所有路径行</param>
+        /// <param name="currentPathBox">当前行的文本框（排除自身）</param>
+        private static string? ValidateFolderAgainstFiles(string folderPath, List<(Grid row, TextBox textBox)> pathRows, TextBox currentPathBox)
+        {
+            var normalizedFolder = Path.GetFullPath(folderPath).TrimEnd('\\', '/');
+            var folderWithSep = normalizedFolder + Path.DirectorySeparatorChar;
+
+            foreach (var (_, textBox) in pathRows)
+            {
+                // 跳过当前行自身
+                if (ReferenceEquals(textBox, currentPathBox))
+                    continue;
+
+                var existingPath = textBox.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(existingPath))
+                    continue;
+
+                // 展开环境变量后再比较
+                var expandedPath = PathEnvironmentHelper.ExpandEnvVariables(existingPath);
+                var normalizedExisting = Path.GetFullPath(expandedPath).TrimEnd('\\', '/');
+
+                // 检查 existingPath 是否是一个文件（通过 File.Exists 或 Path.HasExtension 判断）
+                bool isExistingFile = (File.Exists(expandedPath) && !Directory.Exists(expandedPath)) ||
+                    (!Directory.Exists(expandedPath) && Path.HasExtension(expandedPath));
+
+                if (isExistingFile)
+                {
+                    // 检查该文件是否在新选择的文件夹下
+                    if (normalizedExisting.StartsWith(folderWithSep, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return $"选择的文件夹包含已添加的文件，会导致备份冲突：\n\n" +
+                               $"文件夹: {folderPath}\n" +
+                               $"文件: {existingPath}\n\n" +
+                               $"请选择不包含已添加文件的文件夹，或先移除已添加的文件。";
+                    }
+                }
+            }
+
+            return null;
         }
 
         #endregion

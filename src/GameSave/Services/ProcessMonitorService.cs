@@ -62,11 +62,15 @@ public class ProcessMonitorService
         if (!File.Exists(processPath))
             throw new FileNotFoundException($"可执行文件不存在: {processPath}");
 
+        // 默认使用 exe 所在目录作为工作目录
+        var workingDirectory = Path.GetDirectoryName(processPath) ?? string.Empty;
+
         var startInfo = new ProcessStartInfo
         {
             FileName = processPath,
             Arguments = arguments ?? string.Empty,
-            UseShellExecute = true
+            UseShellExecute = true,
+            WorkingDirectory = workingDirectory
         };
 
         var process = Process.Start(startInfo);

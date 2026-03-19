@@ -39,21 +39,31 @@ public static class TarHelper
     }
 
     /// <summary>
-    /// 将多个源目录打包为一个 .tar 文件
-    /// 每个源目录在 tar 中以序号子目录（0, 1, 2...）隔离存储
+    /// 将多个源路径（目录或文件）打包为一个 .tar 文件
+    /// 每个源路径在 tar 中以序号子目录（0, 1, 2...）隔离存储
+    /// 支持目录和单独文件混合打包
     /// </summary>
-    /// <param name="sourceDirs">源目录路径列表</param>
+    /// <param name="sourcePaths">源路径列表（可以是目录或文件）</param>
     /// <param name="outputPath">输出 .tar 文件路径</param>
     /// <param name="progress">进度报告回调</param>
-    public static async Task CreateTarFromMultipleAsync(List<string> sourceDirs, string outputPath, IProgress<double>? progress = null)
+    public static async Task CreateTarFromMultipleAsync(List<string> sourcePaths, string outputPath, IProgress<double>? progress = null)
     {
-        if (sourceDirs == null || sourceDirs.Count == 0)
-            throw new ArgumentException("至少需要一个源目录");
+        if (sourcePaths == null || sourcePaths.Count == 0)
+            throw new ArgumentException("至少需要一个源路径");
 
-        // 如果只有一个目录，直接使用单目录方法（保持向后兼容）
-        if (sourceDirs.Count == 1)
+        // 如果只有一个路径，根据是文件还是目录分别处理
+        if (sourcePaths.Count == 1)
         {
-            await CreateTarAsync(sourceDirs[0], outputPath, progress);
+            var singlePath = sourcePaths[0];
+            if (File.Exists(singlePath) && !Directory.Exists(singlePath))
+            {
+                // 单文件打包
+                await CreateTarFromSingleFileAsync(singlePath, outputPath, progress);
+            }
+            else
+            {
+                await CreateTarAsync(singlePath, outputPath, progress);
+            }
             return;
         }
 
@@ -66,10 +76,12 @@ public static class TarHelper
         int[] processedFiles = { 0 };
         if (progress != null)
         {
-            foreach (var dir in sourceDirs)
+            foreach (var path in sourcePaths)
             {
-                if (Directory.Exists(dir))
-                    totalFiles += Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length;
+                if (Directory.Exists(path))
+                    totalFiles += Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length;
+                else if (File.Exists(path))
+                    totalFiles += 1;
             }
             progress.Report(0);
         }
@@ -77,30 +89,70 @@ public static class TarHelper
         await using var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
         await using var tarWriter = new TarWriter(fileStream);
 
-        for (int i = 0; i < sourceDirs.Count; i++)
+        for (int i = 0; i < sourcePaths.Count; i++)
         {
-            var sourceDir = sourceDirs[i];
-            if (!Directory.Exists(sourceDir)) continue;
-
-            // 使用索引作为 tar 条目名称前缀来隔离不同源目录
-            var prefix = i.ToString();
-            await AddPrefixedDirectoryToTarAsync(tarWriter, sourceDir, prefix, "", progress, totalFiles, processedFiles);
+            var sourcePath = sourcePaths[i];
+            if (Directory.Exists(sourcePath))
+            {
+                // 目录：使用索引作为 tar 条目名称前缀来隔离不同源目录
+                var prefix = i.ToString();
+                await AddPrefixedDirectoryToTarAsync(tarWriter, sourcePath, prefix, "", progress, totalFiles, processedFiles);
+            }
+            else if (File.Exists(sourcePath))
+            {
+                // 单文件：以 索引/文件名 的形式存入 tar
+                var entryName = $"{i}/{Path.GetFileName(sourcePath)}";
+                await tarWriter.WriteEntryAsync(sourcePath, entryName);
+                if (progress != null)
+                {
+                    processedFiles[0]++;
+                    double pct = totalFiles > 0 ? (double)processedFiles[0] / totalFiles * 100 : 100;
+                    progress.Report(Math.Min(100, pct));
+                }
+            }
         }
     }
 
     /// <summary>
-    /// 将 .tar 文件解包到多个目标目录
-    /// 根据 tar 中的顶层序号目录（0, 1, 2...）分别解压到对应的目标目录
+    /// 将单个文件打包为 .tar 文件
+    /// </summary>
+    private static async Task CreateTarFromSingleFileAsync(string sourceFile, string outputPath, IProgress<double>? progress = null)
+    {
+        if (!File.Exists(sourceFile))
+            throw new FileNotFoundException($"源文件不存在: {sourceFile}");
+
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        progress?.Report(0);
+
+        await using var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+        await using var tarWriter = new TarWriter(fileStream);
+
+        var entryName = Path.GetFileName(sourceFile);
+        await tarWriter.WriteEntryAsync(sourceFile, entryName);
+
+        progress?.Report(100);
+    }
+
+    /// <summary>
+    /// 将 .tar 文件解包到多个目标路径（目录或文件所在目录）
+    /// 根据 tar 中的顶层序号目录（0, 1, 2...）分别解压到对应的目标路径
+    /// 支持目录和文件混合目标路径
     /// </summary>
     /// <param name="tarPath">.tar 文件路径</param>
-    /// <param name="targetDirs">目标目录路径列表（与打包时的顺序对应）</param>
+    /// <param name="targetPaths">目标路径列表（与打包时的顺序对应，可以是目录或文件路径）</param>
     /// <param name="progress">进度报告回调</param>
-    public static async Task ExtractTarToMultipleAsync(string tarPath, List<string> targetDirs, IProgress<double>? progress = null)
+    public static async Task ExtractTarToMultipleAsync(string tarPath, List<string> targetPaths, IProgress<double>? progress = null)
     {
-        if (targetDirs == null || targetDirs.Count == 0)
-            throw new ArgumentException("至少需要一个目标目录");
+        if (targetPaths == null || targetPaths.Count == 0)
+            throw new ArgumentException("至少需要一个目标路径");
 
-        // 如果只有一个目标目录，直接使用单目录方法
+        // 将目标路径解析为实际解压目录：文件路径取其父目录，目录路径直接使用
+        var targetDirs = targetPaths.Select(ResolveTargetDirectory).ToList();
+
+        // 如果只有一个目标路径，直接使用单目录方法
         if (targetDirs.Count == 1)
         {
             await ExtractTarAsync(tarPath, targetDirs[0], progress);
@@ -440,5 +492,34 @@ public static class TarHelper
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// 将目标路径解析为实际的解压目录
+    /// 如果路径指向一个已存在的文件（非目录），则返回文件所在的父目录
+    /// 否则将路径视为目录路径直接返回
+    /// </summary>
+    private static string ResolveTargetDirectory(string targetPath)
+    {
+        // 如果路径已经是一个存在的目录，直接返回
+        if (Directory.Exists(targetPath))
+            return targetPath;
+
+        // 如果路径是一个存在的文件，返回其父目录
+        if (File.Exists(targetPath))
+        {
+            var parentDir = Path.GetDirectoryName(targetPath);
+            return !string.IsNullOrEmpty(parentDir) ? parentDir : targetPath;
+        }
+
+        // 路径不存在时，检查是否有扩展名来判断是文件还是目录
+        if (Path.HasExtension(targetPath))
+        {
+            var parentDir = Path.GetDirectoryName(targetPath);
+            return !string.IsNullOrEmpty(parentDir) ? parentDir : targetPath;
+        }
+
+        // 默认当作目录路径
+        return targetPath;
     }
 }

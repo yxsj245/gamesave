@@ -105,8 +105,9 @@ public class GameService
         // 添加游戏时游戏必定未在运行中（刚添加），有进程路径的可以用直接模式
         // 无进程路径的无法判断游戏是否在外部运行，走热备份
         bool anyHasFiles = game.ResolvedSaveFolderPaths.Any(p =>
-            Directory.Exists(p) &&
-            Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any());
+            (Directory.Exists(p) &&
+            Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any()) ||
+            (File.Exists(p) && !Directory.Exists(p)));
         if (anyHasFiles)
         {
             bool needHotBackup = !game.HasProcessPath;
@@ -220,6 +221,11 @@ public class GameService
                             Progress = 50
                         });
                         ClearDirectory(savePath);
+                    }
+                    else if (File.Exists(savePath))
+                    {
+                        // 单文件路径：直接删除文件
+                        File.Delete(savePath);
                     }
                 }
 
@@ -364,8 +370,9 @@ public class GameService
             try
             {
                 bool anyHasFiles = game.ResolvedSaveFolderPaths.Any(p =>
-                    Directory.Exists(p) &&
-                    Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any());
+                    (Directory.Exists(p) &&
+                    Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories).Any()) ||
+                    (File.Exists(p) && !Directory.Exists(p)));
                 if (anyHasFiles)
                 {
                     var progress = new Progress<double>(p =>

@@ -63,7 +63,7 @@ public class Game : INotifyPropertyChanged
     {
         0 => "未设置存档路径",
         1 => ResolvedSaveFolderPaths[0],
-        _ => $"{ResolvedSaveFolderPaths[0]} 等 {ResolvedSaveFolderPaths.Count} 个目录"
+        _ => $"{ResolvedSaveFolderPaths[0]} 等 {ResolvedSaveFolderPaths.Count} 个路径"
     };
 
     /// <summary>游戏图标路径（可选）</summary>
