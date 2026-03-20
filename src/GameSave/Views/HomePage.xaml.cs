@@ -193,6 +193,13 @@ namespace GameSave.Views
                         return;
                     }
 
+                    // 检查是否需要进入存档探测模式（有启动进程但无存档路径）
+                    if (game.SaveFolderPaths.Count == 0 || game.SaveFolderPaths.All(string.IsNullOrWhiteSpace))
+                    {
+                        await StartSaveDetectionAsync(game);
+                        return;
+                    }
+
                     var (success, message) = await ViewModel.LaunchGameDirectAsync(game);
                     if (success)
                     {
@@ -845,7 +852,7 @@ namespace GameSave.Views
 
                 var savePathBox = new TextBox
                 {
-                    Header = "游戏存档目录 *",
+                    Header = "游戏存档目录（可选，留空可在启动时自动探测）",
                     PlaceholderText = "输入路径或点击浏览选择目录/文件"
                 };
                 Grid.SetColumn(savePathBox, 0);
@@ -1028,45 +1035,7 @@ namespace GameSave.Views
             scrollViewer.Content = mainPanel;
             importDialog.Content = scrollViewer;
 
-            // 使用 Closing 事件拦截验证：点击「导入所选」时检查是否有未补全的必填信息
-            importDialog.Closing += (s, args) =>
-            {
-                // 仅拦截点击主按钮（导入所选）时的关闭
-                if (args.Result != ContentDialogResult.Primary)
-                    return;
-
-                // 查找勾选但未填写存档目录的游戏
-                var incomplete = gameExpanders
-                    .Where(item => item.game.IsSelected && string.IsNullOrWhiteSpace(item.savePathBox.Text))
-                    .ToList();
-
-                if (incomplete.Count > 0)
-                {
-                    // 阻止弹窗关闭
-                    args.Cancel = true;
-
-                    // 先折叠所有 Expander，再展开第一个未补全的
-                    foreach (var item in gameExpanders)
-                    {
-                        item.expander.IsExpanded = false;
-                    }
-
-                    var first = incomplete[0];
-                    first.expander.IsExpanded = true;
-
-                    // 高亮存档目录输入框边框为红色提醒
-                    foreach (var item in incomplete)
-                    {
-                        item.expander.IsExpanded = true;
-                        item.savePathBox.Header = "游戏存档目录 * （请补全此项）";
-                        item.savePathBox.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed);
-                        item.savePathBox.BorderThickness = new Microsoft.UI.Xaml.Thickness(2);
-                    }
-
-                    // 聚焦到第一个未补全的存档目录输入框
-                    first.savePathBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
-                }
-            };
+            // 存档目录为可选项，留空可在启动游戏时通过探测模式自动识别
 
             var result = await importDialog.ShowWithThemeAsync();
 
@@ -1113,6 +1082,15 @@ namespace GameSave.Views
             if (string.IsNullOrWhiteSpace(ViewModel.SelectedGame.ProcessPath))
             {
                 await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                return;
+            }
+
+            // 检查是否需要进入存档探测模式（有启动进程但无存档路径）
+            if (ViewModel.SelectedGame.SaveFolderPaths.Count == 0 || ViewModel.SelectedGame.SaveFolderPaths.All(string.IsNullOrWhiteSpace))
+            {
+                var game = ViewModel.SelectedGame;
+                ViewModel.CloseDetails();
+                await StartSaveDetectionAsync(game);
                 return;
             }
 
@@ -1434,6 +1412,154 @@ namespace GameSave.Views
 
         #endregion
 
+        #region 存档目录探测
+
+        /// <summary>
+        /// 存档探测核心流程：
+        /// 1. 弹窗告知用户探测模式将启动（CPU/内存短暂上升）
+        /// 2. 检查管理员权限，非管理员则提权重启
+        /// 3. 启动游戏进程获取 PID
+        /// 4. 启动 SaveDetectorService 监听
+        /// 5. 隐藏主窗口到托盘，打开置顶探测窗口
+        /// </summary>
+        private async Task StartSaveDetectionAsync(Game game)
+        {
+            // 1. 二次确认弹窗
+            var confirmDialog = new ContentDialog
+            {
+                Title = "🔍 存档目录探测模式",
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"游戏「{game.Name}」未设置存档目录。\n\n" +
+                                   "即将启动存档探测模式：\n" +
+                                   "• 启动游戏后自动监控文件写入操作\n" +
+                                   "• 识别疑似存档目录供您选择\n" +
+                                   "• 探测期间 CPU 和内存将会短暂上升",
+                            TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                        },
+                        new TextBlock
+                        {
+                            Text = "⚠️ 此功能需要管理员权限运行，如当前非管理员将自动提权重启。",
+                            FontSize = 12,
+                            Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                                Microsoft.UI.Colors.Orange),
+                            TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                        }
+                    }
+                },
+                PrimaryButtonText = "开始探测",
+                SecondaryButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await confirmDialog.ShowWithThemeAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            // 2. 检查管理员权限
+            if (!AdminHelper.IsRunAsAdmin())
+            {
+                // 非管理员，提权重启
+                var restarted = AdminHelper.RestartAsAdmin();
+                if (restarted)
+                {
+                    // 退出当前应用
+                    Application.Current.Exit();
+                }
+                else
+                {
+                    await ShowMessageAsync("权限不足", "需要管理员权限才能运行存档探测功能。\n请手动以管理员身份运行此应用。");
+                }
+                return;
+            }
+
+            // 3. 启动游戏进程
+            System.Diagnostics.Process? process;
+            try
+            {
+                process = App.ProcessMonitorService.LaunchProcess(game.ProcessPath!, game.ProcessArgs);
+                if (process == null)
+                {
+                    await ShowMessageAsync("启动失败", "无法启动游戏进程。");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("启动失败", $"启动游戏进程失败: {ex.Message}");
+                return;
+            }
+
+            int pid = process.Id;
+
+            // 4. 启动存档探测服务
+            var detector = new SaveDetectorService();
+            try
+            {
+                detector.Start(pid);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("探测启动失败", $"无法启动 ETW 监控: {ex.Message}\n请确保以管理员身份运行。");
+                detector.Dispose();
+                return;
+            }
+
+            // 5. 隐藏主窗口到托盘
+            App.HideToTrayForGame($"{game.Name}（探测模式）");
+
+            // 6. 创建并显示置顶探测窗口
+            var detectorWindow = new SaveDetectorWindow(detector, game, pid);
+
+            // 用户确认选择：保存存档目录到游戏配置
+            detectorWindow.DirectoriesConfirmed += async (selectedPaths) =>
+            {
+                try
+                {
+                    // 更新游戏的存档路径（将绝对路径替换为环境变量形式，如 %LOCALAPPDATA%\...）
+                    game.SaveFolderPaths = selectedPaths
+                        .Select(p => PathEnvironmentHelper.ReplaceWithEnvVariables(p))
+                        .ToList();
+                    await App.ConfigService.UpdateGameAsync(game);
+
+                    // 刷新 UI
+                    App.MainWindow?.DispatcherQueue?.TryEnqueue(() =>
+                    {
+                        ViewModel.ApplySearchFilter();
+                    });
+
+                    // 发送托盘通知
+                    App.ShowTrayNotification("✅ 存档目录已设置",
+                        $"已为「{game.Name}」设置 {selectedPaths.Count} 个存档目录。");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[存档探测] 保存配置失败: {ex.Message}");
+                }
+                finally
+                {
+                    detector.Dispose();
+                }
+            };
+
+            // 用户取消探测
+            detectorWindow.DetectionCancelled += () =>
+            {
+                detector.Dispose();
+                App.ShowTrayNotification("ℹ️ 探测已取消",
+                    $"已取消「{game.Name}」的存档目录探测。");
+            };
+
+            detectorWindow.Activate();
+        }
+
+        #endregion
+
         #region 辅助方法
 
         private async Task ShowMessageAsync(string title, string message)
@@ -1468,6 +1594,13 @@ namespace GameSave.Views
             if (string.IsNullOrWhiteSpace(game.ProcessPath))
             {
                 await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                return;
+            }
+
+            // 检查是否需要进入存档探测模式（有启动进程但无存档路径）
+            if (game.SaveFolderPaths.Count == 0 || game.SaveFolderPaths.All(string.IsNullOrWhiteSpace))
+            {
+                await StartSaveDetectionAsync(game);
                 return;
             }
 

@@ -307,6 +307,15 @@ namespace GameSave
             app._trayIcon?.ShowBalloonTip(title, message);
         }
 
+        /// <summary>
+        /// 从托盘恢复主窗口（公共方法，供探测窗口等模块调用）
+        /// </summary>
+        public static void RestoreMainWindow()
+        {
+            var app = (App)Current;
+            app.ShowMainWindow();
+        }
+
         /// <summary>获取当前主窗口（用于弹出文件选择器等）</summary>
         public static Window? MainWindow => ((App)Current).m_window;
 

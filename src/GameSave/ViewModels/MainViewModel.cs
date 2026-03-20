@@ -429,13 +429,7 @@ public partial class MainViewModel : BaseViewModel
             {
                 try
                 {
-                    // 存档目录为空则跳过（必填字段）
-                    if (string.IsNullOrWhiteSpace(detected.SaveFolderPath))
-                    {
-                        errors.Add($"「{detected.Name}」未设置存档目录，已跳过");
-                        failCount++;
-                        continue;
-                    }
+                    // 存档目录为可选字段，留空可在启动游戏时通过探测模式自动识别
 
                     var game = new Game
                     {
