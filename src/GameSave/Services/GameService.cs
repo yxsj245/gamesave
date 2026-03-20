@@ -297,6 +297,8 @@ public class GameService
         _ = Task.Run(async () =>
         {
             var exitType = await _processMonitorService.WaitForExitAsync(process);
+            // 监测完成后释放 Process 对象的操作系统句柄，防止内存泄漏
+            process.Dispose();
 
             IsGameRunning = false;
             RunningGameId = null;

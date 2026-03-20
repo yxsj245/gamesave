@@ -19,18 +19,26 @@ public partial class MainViewModel : BaseViewModel
         _gameService = App.GameService;
         _scheduledBackupService = App.ScheduledBackupService;
 
-        // 监听游戏退出事件，刷新存档列表
-        // 注意：GameExited 事件从后台线程触发，必须调度回 UI 线程更新绑定属性
-        _gameService.GameExited += (_, gameId) =>
+        // 监听游戏退出事件，刷新存档列表（使用具名方法，确保可取消订阅）
+        _gameService.GameExited += OnGameExited;
+    }
+
+    /// <summary>游戏退出事件处理：刷新存档列表</summary>
+    private void OnGameExited(object? sender, string gameId)
+    {
+        if (SelectedGame?.Id == gameId)
         {
-            if (SelectedGame?.Id == gameId)
+            App.MainWindow?.DispatcherQueue?.TryEnqueue(async () =>
             {
-                App.MainWindow?.DispatcherQueue?.TryEnqueue(async () =>
-                {
-                    await LoadSavesForGameAsync(gameId);
-                });
-            }
-        };
+                await LoadSavesForGameAsync(gameId);
+            });
+        }
+    }
+
+    /// <summary>清理事件订阅，防止内存泄漏（由 HomePage.OnNavigatedFrom 调用）</summary>
+    public void Cleanup()
+    {
+        _gameService.GameExited -= OnGameExited;
     }
 
     #region 属性

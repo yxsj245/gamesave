@@ -146,34 +146,45 @@ public class ProcessMonitorService
         while (!cancellationToken.IsCancellationRequested)
         {
             var processes = Process.GetProcessesByName(processName);
-            if (processes.Length > 0)
+            try
             {
-                if (!everFound)
+                if (processes.Length > 0)
                 {
-                    Debug.WriteLine($"[进程监测] 轮询模式：检测到进程 {processName} 正在运行");
-                    everFound = true;
+                    if (!everFound)
+                    {
+                        Debug.WriteLine($"[进程监测] 轮询模式：检测到进程 {processName} 正在运行");
+                        everFound = true;
+                    }
+                    notFoundCount = 0; // 重置计数
                 }
-                notFoundCount = 0; // 重置计数
-            }
-            else
-            {
-                notFoundCount++;
-                Debug.WriteLine($"[进程监测] 轮询模式：未检测到进程 {processName}（连续 {notFoundCount}/{NotFoundThreshold} 次）");
-
-                if (notFoundCount >= NotFoundThreshold)
+                else
                 {
-                    if (everFound)
+                    notFoundCount++;
+                    Debug.WriteLine($"[进程监测] 轮询模式：未检测到进程 {processName}（连续 {notFoundCount}/{NotFoundThreshold} 次）");
+
+                    if (notFoundCount >= NotFoundThreshold)
                     {
-                        // 曾经检测到进程运行，现在连续多次检测不到 → 正常退出
-                        Debug.WriteLine($"[进程监测] 进程 {processName} 已正常退出");
-                        return ProcessExitType.Normal;
+                        if (everFound)
+                        {
+                            // 曾经检测到进程运行，现在连续多次检测不到 → 正常退出
+                            Debug.WriteLine($"[进程监测] 进程 {processName} 已正常退出");
+                            return ProcessExitType.Normal;
+                        }
+                        else
+                        {
+                            // 从未检测到进程 → 疑似崩溃或 Steam 未成功启动游戏
+                            Debug.WriteLine($"[进程监测] 进程 {processName} 从未被检测到，疑似崩溃或未成功启动");
+                            return ProcessExitType.CrashOrNotLaunched;
+                        }
                     }
-                    else
-                    {
-                        // 从未检测到进程 → 疑似崩溃或 Steam 未成功启动游戏
-                        Debug.WriteLine($"[进程监测] 进程 {processName} 从未被检测到，疑似崩溃或未成功启动");
-                        return ProcessExitType.CrashOrNotLaunched;
-                    }
+                }
+            }
+            finally
+            {
+                // 释放所有 Process 对象的操作系统句柄，防止内存泄漏
+                foreach (var p in processes)
+                {
+                    p.Dispose();
                 }
             }
 
@@ -202,7 +213,13 @@ public class ProcessMonitorService
 
         var processName = Path.GetFileNameWithoutExtension(processPath);
         var processes = Process.GetProcessesByName(processName);
-        return processes.Length > 0;
+        var isRunning = processes.Length > 0;
+        // 释放所有 Process 对象的操作系统句柄，防止内存泄漏
+        foreach (var p in processes)
+        {
+            p.Dispose();
+        }
+        return isRunning;
     }
 
     /// <summary>
@@ -214,7 +231,13 @@ public class ProcessMonitorService
             return false;
 
         var processes = Process.GetProcessesByName(processName);
-        return processes.Length > 0;
+        var isRunning = processes.Length > 0;
+        // 释放所有 Process 对象的操作系统句柄，防止内存泄漏
+        foreach (var p in processes)
+        {
+            p.Dispose();
+        }
+        return isRunning;
     }
 
     /// <summary>
@@ -225,7 +248,7 @@ public class ProcessMonitorService
     {
         try
         {
-            var process = Process.GetProcessById(processId);
+            using var process = Process.GetProcessById(processId);
             if (!process.HasExited)
             {
                 process.Kill(true); // 递归结束进程树
@@ -271,6 +294,11 @@ public class ProcessMonitorService
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"结束进程 {processName} (PID={process.Id}) 失败: {ex.Message}");
+                }
+                finally
+                {
+                    // 释放 Process 对象的操作系统句柄，防止内存泄漏
+                    process.Dispose();
                 }
             }
         }

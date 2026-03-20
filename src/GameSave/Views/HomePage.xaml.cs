@@ -14,29 +14,8 @@ namespace GameSave.Views
             this.InitializeComponent();
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-            // 监听游戏崩溃检测事件，弹窗提示用户
-            App.GameService.GameCrashDetected += async (_, gameName) =>
-            {
-                var dispatcherQueue = App.MainWindow?.DispatcherQueue;
-                if (dispatcherQueue != null)
-                {
-                    dispatcherQueue.TryEnqueue(async () =>
-                    {
-                        try
-                        {
-                            await ShowMessageAsync("⚠️ 异常退出",
-                                $"检测到「{gameName}」程序崩溃或未成功启动，本次退出存档将不再备份。\n\n" +
-                                "可能的原因：\n" +
-                                "• Steam 等启动器劫持了进程，但未成功启动游戏\n" +
-                                "• 游戏进程异常终止");
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[HomePage] 崩溃提示弹窗异常: {ex.Message}");
-                        }
-                    });
-                }
-            };
+            // 监听游戏崩溃检测事件，弹窗提示用户（使用具名方法，确保可取消订阅）
+            App.GameService.GameCrashDetected += OnGameCrashDetected;
         }
 
         public MainViewModel ViewModel { get; } = new MainViewModel();
@@ -53,6 +32,39 @@ namespace GameSave.Views
                 System.Diagnostics.Debug.WriteLine($"[HomePage] 初始化异常: {ex}");
             }
             UpdateEmptyState();
+        }
+
+        /// <summary>离开页面时取消事件订阅，防止内存泄漏</summary>
+        protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+            App.GameService.GameCrashDetected -= OnGameCrashDetected;
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            ViewModel.Cleanup();
+        }
+
+        /// <summary>游戏崩溃检测事件处理（从构造函数的匿名 lambda 提取为具名方法，确保可取消订阅）</summary>
+        private async void OnGameCrashDetected(object? sender, string gameName)
+        {
+            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (dispatcherQueue != null)
+            {
+                dispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        await ShowMessageAsync("⚠️ 异常退出",
+                            $"检测到「{gameName}」程序崩溃或未成功启动，本次退出存档将不再备份。\n\n" +
+                            "可能的原因：\n" +
+                            "• Steam 等启动器劫持了进程，但未成功启动游戏\n" +
+                            "• 游戏进程异常终止");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[HomePage] 崩溃提示弹窗异常: {ex.Message}");
+                    }
+                });
+            }
         }
 
         /// <summary>更新空状态提示的可见性</summary>
