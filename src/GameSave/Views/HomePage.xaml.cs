@@ -765,16 +765,65 @@ namespace GameSave.Views
                 nameBox.TextChanged += (s, args) => detected.Name = nameBox.Text;
                 contentPanel.Children.Add(nameBox);
 
-                // 启动进程（已自动填充）
+                // 启动进程（已自动检测 / 未检测到时允许手动选择）
+                var hasExePath = !string.IsNullOrEmpty(detected.ExePath);
+                var exePathPanel = new Grid();
+                exePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                exePathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
                 var exeInfo = new TextBox
                 {
-                    Header = "启动进程（已自动检测）",
-                    Text = detected.ExePath ?? "未检测到",
-                    IsReadOnly = true,
+                    Header = hasExePath ? "启动进程（已自动检测）" : "启动进程（可选，未检测到）",
+                    Text = hasExePath ? detected.ExePath! : "",
+                    PlaceholderText = hasExePath ? "" : "输入路径或点击浏览选择文件",
+                    IsReadOnly = hasExePath,
                     Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                        string.IsNullOrEmpty(detected.ExePath) ? Microsoft.UI.Colors.OrangeRed : Microsoft.UI.Colors.Gray)
+                        hasExePath ? Microsoft.UI.Colors.Gray : Microsoft.UI.Colors.White)
                 };
-                contentPanel.Children.Add(exeInfo);
+                Grid.SetColumn(exeInfo, 0);
+
+                // 手动输入时同步更新 detected.ExePath
+                if (!hasExePath)
+                {
+                    exeInfo.TextChanged += (s, args) =>
+                    {
+                        detected.ExePath = exeInfo.Text;
+                    };
+                }
+
+                exePathPanel.Children.Add(exeInfo);
+
+                // 未检测到时，右侧显示浏览按钮
+                if (!hasExePath)
+                {
+                    var browseExeBtn = new Button
+                    {
+                        Content = "浏览",
+                        VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                        Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
+                    };
+                    browseExeBtn.Click += async (s, args) =>
+                    {
+                        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                        picker.FileTypeFilter.Add(".exe");
+                        picker.FileTypeFilter.Add("*");
+
+                        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                        var file = await picker.PickSingleFileAsync();
+                        if (file != null)
+                        {
+                            exeInfo.Text = file.Path;
+                            detected.ExePath = file.Path;
+                        }
+                    };
+                    Grid.SetColumn(browseExeBtn, 1);
+                    exePathPanel.Children.Add(browseExeBtn);
+                }
+
+                contentPanel.Children.Add(exePathPanel);
 
                 // 存档目录（必须用户手动选择）
                 var savePathPanel = new Grid();
