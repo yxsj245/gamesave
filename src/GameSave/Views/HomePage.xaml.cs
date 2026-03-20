@@ -1497,8 +1497,13 @@ namespace GameSave.Views
 
             int pid = process.Id;
 
-            // 4. 启动存档探测服务
-            var detector = new SaveDetectorService();
+            // 4. 启动存档探测服务（传入游戏启动进程所在目录）
+            string? gameDirectory = null;
+            if (!string.IsNullOrEmpty(game.ProcessPath))
+            {
+                gameDirectory = Path.GetDirectoryName(game.ProcessPath);
+            }
+            var detector = new SaveDetectorService(gameDirectory);
             try
             {
                 detector.Start(pid);

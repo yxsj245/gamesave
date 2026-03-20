@@ -7,6 +7,7 @@ namespace GameSave.Views;
 /// <summary>
 /// 存档目录探测结果窗口
 /// 置顶显示，展示 SaveDetectorService 捕获到的疑似存档目录
+/// 分三个区块展示：用户目录、游戏安装目录、其他目录
 /// </summary>
 public sealed partial class SaveDetectorWindow : Window
 {
@@ -34,8 +35,10 @@ public sealed partial class SaveDetectorWindow : Window
     private const int MinWidth = 520;
     private const int WindowHeight = 650;
 
-    // 每个目录项的 UI 状态
-    private readonly List<DirectoryItemState> _directoryItems = new();
+    // 每个目录项的 UI 状态（按区域分组管理）
+    private readonly List<DirectoryItemState> _userProfileItems = new();
+    private readonly List<DirectoryItemState> _gameDirectoryItems = new();
+    private readonly List<DirectoryItemState> _otherItems = new();
 
     /// <summary>
     /// 用户确认选择后触发，参数为选中的目录路径列表
@@ -53,6 +56,7 @@ public sealed partial class SaveDetectorWindow : Window
     private class DirectoryItemState
     {
         public string Path { get; set; } = string.Empty;
+        public string SourceZone { get; set; } = SaveDetectorService.ZoneOther;
         public CheckBox CheckBox { get; set; } = null!;
         public StackPanel FilesPanel { get; set; } = null!;
         public StackPanel Panel { get; set; } = null!;
@@ -61,6 +65,12 @@ public sealed partial class SaveDetectorWindow : Window
         public long CurrentScore { get; set; }
         public bool IsExpanded { get; set; }
     }
+
+    /// <summary>
+    /// 获取所有区域的目录项合集
+    /// </summary>
+    private IEnumerable<DirectoryItemState> AllItems =>
+        _userProfileItems.Concat(_gameDirectoryItems).Concat(_otherItems);
 
     public SaveDetectorWindow(SaveDetectorService detector, Models.Game game, int pid)
     {
@@ -94,6 +104,12 @@ public sealed partial class SaveDetectorWindow : Window
             };
         }
 
+        // 如果有游戏目录，设置游戏目录区块标题
+        if (!string.IsNullOrEmpty(detector.GameDirectory))
+        {
+            GameDirectoryTitle.Text = $"🎮 游戏安装目录（{detector.GameDirectory}）";
+        }
+
         // 订阅探测事件
         _detector.DirectoryDiscovered += OnDirectoryDiscovered;
         _detector.StatsUpdated += OnStatsUpdated;
@@ -123,12 +139,12 @@ public sealed partial class SaveDetectorWindow : Window
         DispatcherQueue?.TryEnqueue(() =>
         {
             // 检查是否已存在
-            if (_directoryItems.Any(d => d.Path.Equals(dir.Path, StringComparison.OrdinalIgnoreCase)))
+            if (AllItems.Any(d => d.Path.Equals(dir.Path, StringComparison.OrdinalIgnoreCase)))
                 return;
 
             AddDirectoryItem(dir);
             UpdateEmptyHint();
-            SortDirectoryList();
+            SortDirectoryList(dir.SourceZone);
         });
     }
 
@@ -149,22 +165,35 @@ public sealed partial class SaveDetectorWindow : Window
     private void RefreshStats()
     {
         var results = _detector.GetResults();
+        // 记录哪些区域需要重新排序
+        var zonesToSort = new HashSet<string>();
+
         foreach (var result in results)
         {
-            var item = _directoryItems.FirstOrDefault(d =>
+            var item = AllItems.FirstOrDefault(d =>
                 d.Path.Equals(result.Path, StringComparison.OrdinalIgnoreCase));
             if (item != null)
             {
                 item.WriteCountText.Text = $"写入: {result.WriteCount} 次";
                 item.ScoreText.Text = $"得分: {result.Score}";
 
+                // 如果得分变化了，需要重排该区域
+                if (item.CurrentScore != result.Score)
+                {
+                    item.CurrentScore = result.Score;
+                    zonesToSort.Add(item.SourceZone);
+                }
+
                 // 更新文件列表
                 UpdateFilesPanel(item, result.Files);
             }
         }
 
-        // 按得分重新排序
-        SortDirectoryList();
+        // 只重排得分变化的区域
+        foreach (var zone in zonesToSort)
+        {
+            SortDirectoryList(zone);
+        }
     }
 
     /// <summary>
@@ -187,10 +216,25 @@ public sealed partial class SaveDetectorWindow : Window
     }
 
     /// <summary>
-    /// 添加一个目录项到列表
+    /// 根据 SourceZone 获取对应的列表和容器
+    /// </summary>
+    private (List<DirectoryItemState> items, StackPanel list, StackPanel section) GetZoneContainers(string sourceZone)
+    {
+        return sourceZone switch
+        {
+            SaveDetectorService.ZoneUserProfile => (_userProfileItems, UserProfileList, UserProfileSection),
+            SaveDetectorService.ZoneGameDirectory => (_gameDirectoryItems, GameDirectoryList, GameDirectorySection),
+            _ => (_otherItems, OtherList, OtherSection)
+        };
+    }
+
+    /// <summary>
+    /// 添加一个目录项到对应区块的列表
     /// </summary>
     private void AddDirectoryItem(DetectedDirectory dir)
     {
+        var (items, list, section) = GetZoneContainers(dir.SourceZone);
+
         var itemPanel = new StackPanel
         {
             Margin = new Thickness(0, 2, 0, 2),
@@ -304,6 +348,7 @@ public sealed partial class SaveDetectorWindow : Window
         var itemState = new DirectoryItemState
         {
             Path = dir.Path,
+            SourceZone = dir.SourceZone,
             CheckBox = checkBox,
             FilesPanel = filesPanel,
             Panel = itemPanel,
@@ -312,7 +357,7 @@ public sealed partial class SaveDetectorWindow : Window
             CurrentScore = dir.Score,
             IsExpanded = false
         };
-        _directoryItems.Add(itemState);
+        items.Add(itemState);
 
         // 展开按钮点击事件
         expandButton.Click += (_, _) =>
@@ -328,7 +373,11 @@ public sealed partial class SaveDetectorWindow : Window
         itemPanel.Children.Add(headerGrid);
         itemPanel.Children.Add(filesPanel);
 
-        DirectoryList.Children.Add(itemPanel);
+        list.Children.Add(itemPanel);
+
+        // 显示该区块并更新计数
+        section.Visibility = Visibility.Visible;
+        UpdateZoneCount(dir.SourceZone);
 
         // 根据路径长度自动调整窗口宽度
         AdjustWindowWidth(dir.Path);
@@ -365,53 +414,64 @@ public sealed partial class SaveDetectorWindow : Window
     }
 
     /// <summary>
-    /// 按得分对列表重新排序（将高得分项排前面）
+    /// 按得分对指定区域的列表重新排序（将高得分项排前面）
     /// </summary>
-    private void SortDirectoryList()
+    private void SortDirectoryList(string? zone = null)
     {
         // 获取最新得分
         var results = _detector.GetResults();
+
+        // 更新所有项的得分
         foreach (var result in results)
         {
-            var item = _directoryItems.FirstOrDefault(d =>
+            var item = AllItems.FirstOrDefault(d =>
                 d.Path.Equals(result.Path, StringComparison.OrdinalIgnoreCase));
             if (item != null)
                 item.CurrentScore = result.Score;
         }
 
-        // 按得分降序排列
-        var sorted = _directoryItems.OrderByDescending(d => d.CurrentScore).ToList();
+        // 对指定区域排序，如果未指定则全部排序
+        if (zone == null || zone == SaveDetectorService.ZoneUserProfile)
+            SortZoneList(_userProfileItems, UserProfileList);
+        if (zone == null || zone == SaveDetectorService.ZoneGameDirectory)
+            SortZoneList(_gameDirectoryItems, GameDirectoryList);
+        if (zone == null || zone == SaveDetectorService.ZoneOther)
+            SortZoneList(_otherItems, OtherList);
+    }
 
-        // 移除所有目录项 UI（保留 EmptyHint）
-        for (int i = DirectoryList.Children.Count - 1; i >= 0; i--)
-        {
-            if (DirectoryList.Children[i] != EmptyHint)
-                DirectoryList.Children.RemoveAt(i);
-        }
+    /// <summary>
+    /// 对单个区域的列表进行排序
+    /// </summary>
+    private static void SortZoneList(List<DirectoryItemState> items, StackPanel listPanel)
+    {
+        if (items.Count <= 1) return;
 
-        // 按排序后的顺序重新添加
+        var sorted = items.OrderByDescending(d => d.CurrentScore).ToList();
+
+        listPanel.Children.Clear();
         foreach (var item in sorted)
         {
-            DirectoryList.Children.Add(item.Panel);
+            listPanel.Children.Add(item.Panel);
         }
     }
 
     /// <summary>
-    /// 更新空状态提示可见性
+    /// 更新空状态提示可见性（所有区域都没有目录时显示）
     /// </summary>
     private void UpdateEmptyHint()
     {
-        EmptyHint.Visibility = _directoryItems.Count == 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        bool hasAny = _userProfileItems.Count > 0 || _gameDirectoryItems.Count > 0 || _otherItems.Count > 0;
+        EmptyHint.Visibility = hasAny
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     /// <summary>
-    /// 更新底部已选数量文本
+    /// 更新底部已选数量文本（跨区域统一计数）
     /// </summary>
     private void UpdateSelectedCount()
     {
-        int count = _directoryItems.Count(d => d.CheckBox.IsChecked == true);
+        int count = AllItems.Count(d => d.CheckBox.IsChecked == true);
         SelectedCountText.Text = count > 0
             ? $"已选择 {count} 个目录"
             : "未选择任何目录";
@@ -423,7 +483,7 @@ public sealed partial class SaveDetectorWindow : Window
     /// </summary>
     private async void ConfirmButton_Click(object sender, RoutedEventArgs e)
     {
-        var selectedPaths = _directoryItems
+        var selectedPaths = AllItems
             .Where(d => d.CheckBox.IsChecked == true)
             .Select(d => d.Path)
             .ToList();
@@ -487,4 +547,59 @@ public sealed partial class SaveDetectorWindow : Window
         // 关闭窗口
         this.Close();
     }
+
+    #region 区块折叠/展开
+
+    // 区块展开状态
+    private bool _userProfileExpanded = false;
+    private bool _gameDirectoryExpanded = false;
+    private bool _otherExpanded = false;
+
+    private void UserProfileHeader_Click(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _userProfileExpanded = !_userProfileExpanded;
+        ToggleZone(_userProfileExpanded, UserProfileList, UserProfileArrow);
+    }
+
+    private void GameDirectoryHeader_Click(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _gameDirectoryExpanded = !_gameDirectoryExpanded;
+        ToggleZone(_gameDirectoryExpanded, GameDirectoryList, GameDirectoryArrow);
+    }
+
+    private void OtherHeader_Click(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _otherExpanded = !_otherExpanded;
+        ToggleZone(_otherExpanded, OtherList, OtherArrow);
+    }
+
+    /// <summary>
+    /// 切换区块的展开/折叠状态
+    /// </summary>
+    private static void ToggleZone(bool expanded, StackPanel list, TextBlock arrow)
+    {
+        list.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        arrow.Text = expanded ? "▼" : "▶";
+    }
+
+    /// <summary>
+    /// 更新区块标题中的条目计数
+    /// </summary>
+    private void UpdateZoneCount(string sourceZone)
+    {
+        switch (sourceZone)
+        {
+            case SaveDetectorService.ZoneUserProfile:
+                UserProfileCount.Text = $"({_userProfileItems.Count})";
+                break;
+            case SaveDetectorService.ZoneGameDirectory:
+                GameDirectoryCount.Text = $"({_gameDirectoryItems.Count})";
+                break;
+            case SaveDetectorService.ZoneOther:
+                OtherCount.Text = $"({_otherItems.Count})";
+                break;
+        }
+    }
+
+    #endregion
 }
