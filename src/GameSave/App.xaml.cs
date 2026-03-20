@@ -227,6 +227,26 @@ namespace GameSave
         }
 
         /// <summary>
+        /// 强制退出应用（跳过托盘最小化拦截）
+        /// 供提权重启等需要真正退出应用的场景使用
+        /// </summary>
+        public static void ForceExit()
+        {
+            var app = (App)Current;
+            app._isExiting = true;
+
+            // 清理托盘图标
+            app._trayIcon?.Dispose();
+            app._trayIcon = null;
+
+            // 停止管道监听
+            app.StopPipeListener();
+
+            // 关闭窗口并退出
+            app.m_window?.Close();
+        }
+
+        /// <summary>
         /// 订阅游戏状态变更事件，在游戏退出后通过系统托盘通知用户备份结果
         /// 不再恢复窗口，改为全程后台运行 + 托盘通知
         /// </summary>

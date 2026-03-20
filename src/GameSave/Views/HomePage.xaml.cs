@@ -1468,8 +1468,8 @@ namespace GameSave.Views
                 var restarted = AdminHelper.RestartAsAdmin();
                 if (restarted)
                 {
-                    // 退出当前应用
-                    Application.Current.Exit();
+                    // 强制退出当前应用（跳过托盘拦截）
+                    App.ForceExit();
                 }
                 else
                 {

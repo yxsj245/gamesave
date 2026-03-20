@@ -21,6 +21,9 @@ public static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // 如果是提权重启，先等待旧进程退出再检查互斥锁
+        WaitForOldProcessIfNeeded(args);
+
         // 尝试创建全局互斥体来检测是否已有实例运行
         using var mutex = new Mutex(true, MutexName, out bool isNewInstance);
 
@@ -60,6 +63,31 @@ public static class Program
         catch
         {
             // 连接失败，可能是旧实例正在退出，忽略错误
+        }
+    }
+
+    /// <summary>
+    /// 如果启动参数包含 --wait-exit，等待指定 PID 的旧进程退出
+    /// 用于提权重启场景：新进程需等旧进程释放互斥锁后才能正常获取
+    /// </summary>
+    private static void WaitForOldProcessIfNeeded(string[] args)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--wait-exit" && int.TryParse(args[i + 1], out int oldPid))
+            {
+                try
+                {
+                    var oldProcess = System.Diagnostics.Process.GetProcessById(oldPid);
+                    // 最多等待 5 秒
+                    oldProcess.WaitForExit(5000);
+                }
+                catch
+                {
+                    // 进程已退出或无法获取，继续
+                }
+                break;
+            }
         }
     }
 }

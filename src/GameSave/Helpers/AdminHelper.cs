@@ -36,6 +36,7 @@ public static class AdminHelper
             var startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
+                Arguments = $"--wait-exit {Environment.ProcessId}",
                 UseShellExecute = true,
                 Verb = "runas" // 触发 UAC 提权
             };
