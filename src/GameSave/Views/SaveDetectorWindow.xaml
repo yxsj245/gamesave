@@ -30,18 +30,64 @@
                      IsIndeterminate="True" 
                      Margin="0,0,0,12"/>
 
-        <!-- 存档目录列表 -->
+        <!-- 存档目录列表（三区块） -->
         <ScrollViewer Grid.Row="2" 
                       VerticalScrollBarVisibility="Auto"
                       Margin="0,0,0,12">
-            <StackPanel x:Name="DirectoryList" Spacing="4">
-                <!-- 空状态提示 -->
+            <StackPanel Spacing="8">
+                <!-- 全局空状态提示 -->
                 <TextBlock x:Name="EmptyHint"
                            Text="暂未发现任何疑似存档目录，请在游戏中执行存档操作..."
                            FontSize="13"
                            Foreground="{ThemeResource SystemControlForegroundBaseMediumLowBrush}"
                            HorizontalAlignment="Center"
                            Margin="0,40,0,0"/>
+
+                <!-- 区块1：用户目录（AppData/Documents 等） -->
+                <StackPanel x:Name="UserProfileSection" Visibility="Collapsed" Spacing="0">
+                    <StackPanel x:Name="UserProfileHeader" Orientation="Horizontal" Spacing="8"
+                                Padding="8,6" Background="Transparent" 
+                                PointerPressed="UserProfileHeader_Click">
+                        <TextBlock x:Name="UserProfileArrow" Text="▶" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock Text="📁 用户目录（AppData / Documents 等）"
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="UserProfileCount" Text="(0)" FontSize="12"
+                                   Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel x:Name="UserProfileList" Spacing="4" Visibility="Collapsed" Margin="8,0,0,0"/>
+                </StackPanel>
+
+                <!-- 区块2：游戏安装目录 -->
+                <StackPanel x:Name="GameDirectorySection" Visibility="Collapsed" Spacing="0">
+                    <StackPanel x:Name="GameDirectoryHeader" Orientation="Horizontal" Spacing="8"
+                                Padding="8,6" Background="Transparent"
+                                PointerPressed="GameDirectoryHeader_Click">
+                        <TextBlock x:Name="GameDirectoryArrow" Text="▶" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="GameDirectoryTitle"
+                                   Text="🎮 游戏安装目录"
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="GameDirectoryCount" Text="(0)" FontSize="12"
+                                   Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel x:Name="GameDirectoryList" Spacing="4" Visibility="Collapsed" Margin="8,0,0,0"/>
+                </StackPanel>
+
+                <!-- 区块3：其他目录 -->
+                <StackPanel x:Name="OtherSection" Visibility="Collapsed" Spacing="0">
+                    <StackPanel x:Name="OtherHeader" Orientation="Horizontal" Spacing="8"
+                                Padding="8,6" Background="Transparent"
+                                PointerPressed="OtherHeader_Click">
+                        <TextBlock x:Name="OtherArrow" Text="▶" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock Text="📂 其他目录"
+                                   FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="OtherCount" Text="(0)" FontSize="12"
+                                   Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel x:Name="OtherList" Spacing="4" Visibility="Collapsed" Margin="8,0,0,0"/>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

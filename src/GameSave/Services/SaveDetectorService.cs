@@ -34,6 +34,9 @@ public class DetectedDirectory
 
     /// <summary>最后一次写入时间</summary>
     public DateTime LastSeen { get; set; }
+
+    /// <summary>来源区域标识：UserProfile / GameDirectory / Other</summary>
+    public string SourceZone { get; set; } = "Other";
 }
 
 /// <summary>
@@ -44,6 +47,13 @@ public class DetectedDirectory
 public class SaveDetectorService : IDisposable
 {
     private const string SessionName = "GameSaveSaveDetector";
+
+    /// <summary>来源区域常量：用户目录（AppData/Documents 等）</summary>
+    public const string ZoneUserProfile = "UserProfile";
+    /// <summary>来源区域常量：游戏启动进程所在目录</summary>
+    public const string ZoneGameDirectory = "GameDirectory";
+    /// <summary>来源区域常量：其他目录</summary>
+    public const string ZoneOther = "Other";
 
     private TraceEventSession? _session;
     private int _targetPid;
@@ -63,6 +73,18 @@ public class SaveDetectorService : IDisposable
     // 用户目录路径白名单
     private readonly List<string> _userPaths;
 
+    // 游戏启动进程所在目录
+    private readonly string? _gameDirectory;
+
+    // ===== 事件节流相关 =====
+    // 待通知的新发现目录队列
+    private readonly ConcurrentQueue<DetectedDirectory> _pendingNewDirs = new();
+    // 统计信息是否有变化（原子标志）
+    private volatile bool _statsChanged;
+    // 节流定时器（每500ms批量触发一次事件）
+    private Timer? _throttleTimer;
+    private const int ThrottleIntervalMs = 500;
+
     /// <summary>
     /// 新目录被发现时触发的事件
     /// </summary>
@@ -79,6 +101,11 @@ public class SaveDetectorService : IDisposable
     public bool IsRunning => _isRunning;
 
     /// <summary>
+    /// 游戏启动进程所在目录（供外部读取判断是否有游戏目录区块）
+    /// </summary>
+    public string? GameDirectory => _gameDirectory;
+
+    /// <summary>
     /// 目录写入统计信息（内部使用）
     /// </summary>
     private class DirectoryStats
@@ -88,11 +115,22 @@ public class SaveDetectorService : IDisposable
         public DateTime FirstSeen;
         public DateTime LastSeen;
         public int Depth;
+        /// <summary>来源区域标识</summary>
+        public string SourceZone = ZoneOther;
     }
 
-    public SaveDetectorService()
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="gameDirectory">游戏启动进程所在目录（可选），传入后会额外探测该目录下的存档</param>
+    public SaveDetectorService(string? gameDirectory = null)
     {
         _userPaths = BuildUserPaths();
+        // 规范化游戏目录路径（去掉末尾分隔符）
+        if (!string.IsNullOrWhiteSpace(gameDirectory))
+        {
+            _gameDirectory = gameDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
     }
 
     /// <summary>
@@ -150,6 +188,9 @@ public class SaveDetectorService : IDisposable
         RegisterCallbacks(_session.Source);
         _isRunning = true;
 
+        // 启动节流定时器，每500ms批量通知 UI 一次
+        _throttleTimer = new Timer(FlushPendingEvents, null, ThrottleIntervalMs, ThrottleIntervalMs);
+
         _processingThread = new Thread(() =>
         {
             try { _session.Source.Process(); }
@@ -174,6 +215,13 @@ public class SaveDetectorService : IDisposable
         if (!_isRunning) return;
         _isRunning = false;
 
+        // 停止节流定时器
+        _throttleTimer?.Dispose();
+        _throttleTimer = null;
+
+        // 最后刷新一次残留事件
+        FlushPendingEvents(null);
+
         try { _session?.Stop(); } catch { }
         _processingThread?.Join(3000);
     }
@@ -193,6 +241,7 @@ public class SaveDetectorService : IDisposable
                 Depth = kv.Value.Depth,
                 FirstSeen = kv.Value.FirstSeen,
                 LastSeen = kv.Value.LastSeen,
+                SourceZone = kv.Value.SourceZone,
                 Files = _dirFiles.TryGetValue(kv.Key, out var files)
                     ? files.Keys.ToList()
                     : new List<string>()
@@ -239,7 +288,41 @@ public class SaveDetectorService : IDisposable
     private void ProcessWriteEvent(string filePath, int ioSize)
     {
         if (string.IsNullOrEmpty(filePath) || filePath.StartsWith("<")) return;
-        if (!IsUnderUserPath(filePath)) return;
+
+        // 分类判断文件属于哪个区域
+        string sourceZone;
+        int depth;
+        int minDepth;
+
+        if (IsUnderUserPath(filePath))
+        {
+            // C盘用户目录区域
+            sourceZone = ZoneUserProfile;
+            string? dirCheck = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrEmpty(dirCheck)) return;
+            depth = CalcDepthFromUserRoot(dirCheck);
+            minDepth = 2; // 用户目录至少 2 层深度（如 LocalLow\Company\Game）
+        }
+        else if (IsUnderGamePath(filePath))
+        {
+            // 游戏启动进程所在目录区域
+            sourceZone = ZoneGameDirectory;
+            string? dirCheck = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrEmpty(dirCheck)) return;
+            depth = CalcDepthFromGameRoot(dirCheck);
+            minDepth = 1; // 游戏目录至少 1 层深度
+        }
+        else
+        {
+            // 其他区域（既不在用户目录也不在游戏目录）
+            // 快速排除系统路径，避免大量无关事件涌入导致 UI 阻塞
+            if (IsSystemPath(filePath)) return;
+            sourceZone = ZoneOther;
+            string? dirCheck = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrEmpty(dirCheck)) return;
+            depth = CalcDepthFromDriveRoot(dirCheck);
+            minDepth = 2; // 其他区域至少 2 层深度
+        }
 
         string? dirPath = Path.GetDirectoryName(filePath);
         if (string.IsNullOrEmpty(dirPath)) return;
@@ -253,11 +336,8 @@ public class SaveDetectorService : IDisposable
             fileSet.TryAdd(fileName, true);
         }
 
-        int depth = CalcDepthFromUserRoot(dirPath);
-
-        // 过滤深度不足的目录（如 AppData、LocalLow 自身不可能是游戏存档目录）
-        // 典型存档路径至少有 2 层深度，如 LocalLow\CompanyName\GameName
-        if (depth < 2) return;
+        // 过滤深度不足的目录
+        if (depth < minDepth) return;
 
         bool isNew = false;
         _discoveredDirs.AddOrUpdate(
@@ -271,7 +351,8 @@ public class SaveDetectorService : IDisposable
                     TotalBytes = ioSize,
                     FirstSeen = DateTime.Now,
                     LastSeen = DateTime.Now,
-                    Depth = depth
+                    Depth = depth,
+                    SourceZone = sourceZone
                 };
             },
             (_, existing) =>
@@ -285,7 +366,7 @@ public class SaveDetectorService : IDisposable
 
         if (isNew)
         {
-            // 触发新目录发现事件
+            // 将新目录加入待通知队列（由节流定时器批量触发）
             var detected = new DetectedDirectory
             {
                 Path = dirPath,
@@ -295,14 +376,35 @@ public class SaveDetectorService : IDisposable
                 Depth = depth,
                 FirstSeen = DateTime.Now,
                 LastSeen = DateTime.Now,
+                SourceZone = sourceZone,
                 Files = _dirFiles.TryGetValue(dirPath, out var files)
                     ? files.Keys.ToList()
                     : new List<string>()
             };
-            DirectoryDiscovered?.Invoke(detected);
+            _pendingNewDirs.Enqueue(detected);
         }
         else
         {
+            // 标记统计信息已变化（由节流定时器批量触发通知）
+            _statsChanged = true;
+        }
+    }
+
+    /// <summary>
+    /// 节流定时器回调：批量触发缓存的事件，减少对 UI 线程的冲击
+    /// </summary>
+    private void FlushPendingEvents(object? state)
+    {
+        // 批量触发新发现的目录
+        while (_pendingNewDirs.TryDequeue(out var dir))
+        {
+            DirectoryDiscovered?.Invoke(dir);
+        }
+
+        // 批量触发统计更新（多次写入合并为一次通知）
+        if (_statsChanged)
+        {
+            _statsChanged = false;
             StatsUpdated?.Invoke();
         }
     }
@@ -364,6 +466,66 @@ public class SaveDetectorService : IDisposable
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// 判断文件路径是否在游戏启动进程所在目录下
+    /// </summary>
+    private bool IsUnderGamePath(string filePath)
+    {
+        if (_gameDirectory == null) return false;
+        return filePath.StartsWith(_gameDirectory, StringComparison.OrdinalIgnoreCase)
+            && filePath.Length > _gameDirectory.Length
+            && (filePath[_gameDirectory.Length] == Path.DirectorySeparatorChar
+                || filePath[_gameDirectory.Length] == Path.AltDirectorySeparatorChar);
+    }
+
+    /// <summary>
+    /// 判断文件路径是否在系统/噪音目录下（快速排除，避免"其他"区域接收大量无关事件）
+    /// </summary>
+    private static bool IsSystemPath(string filePath)
+    {
+        string lower = filePath.ToLowerInvariant();
+
+        // 排除 Windows 系统目录
+        if (lower.Contains("\\windows\\")) return true;
+
+        // 排除 Program Files（这些路径一般是程序本体，不是存档位置）
+        if (lower.Contains("\\program files\\") || lower.Contains("\\program files (x86)\\")) return true;
+
+        // 排除 ProgramData 下的系统子目录
+        if (lower.Contains("\\programdata\\microsoft\\")) return true;
+        if (lower.Contains("\\programdata\\package cache\\")) return true;
+
+        // 排除驱动和系统临时目录
+        if (lower.Contains("\\system volume information\\")) return true;
+        if (lower.Contains("\\$recycle.bin\\")) return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// 计算目录相对于游戏安装目录的嵌套深度
+    /// </summary>
+    private int CalcDepthFromGameRoot(string dirPath)
+    {
+        if (_gameDirectory == null) return 0;
+        if (!dirPath.StartsWith(_gameDirectory, StringComparison.OrdinalIgnoreCase)) return 0;
+        string relative = dirPath[_gameDirectory.Length..];
+        if (relative.Length == 0) return 0;
+        return relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    /// <summary>
+    /// 计算目录相对于盘符根目录的嵌套深度（用于"其他"区域）
+    /// </summary>
+    private static int CalcDepthFromDriveRoot(string dirPath)
+    {
+        var root = Path.GetPathRoot(dirPath);
+        if (string.IsNullOrEmpty(root)) return 0;
+        string relative = dirPath[root.Length..];
+        if (relative.Length == 0) return 0;
+        return relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
     /// <summary>

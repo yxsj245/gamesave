@@ -302,4 +302,3 @@ dotnet run --project src/GameSave/GameSave.csproj
 - [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) — 轻量级 MVVM 框架
 - [WiX Toolset](https://wixtoolset.org/) — Windows Installer 打包工具
 - [Aliyun OSS SDK](https://github.com/aliyun/aliyun-oss-csharp-sdk) — 阿里云对象存储 SDK
-- [Game Save Manager (旧版)](https://github.com/dyang886/Game-Save-Manager) — 项目灵感来源
