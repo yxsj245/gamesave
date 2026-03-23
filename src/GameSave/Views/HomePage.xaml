@@ -386,6 +386,11 @@
                                     <TextBlock Text="备份"/>
                                 </StackPanel>
                             </Button>
+                            <!-- 打开存档目录 -->
+                            <Button Click="OpenBackupFolder_Click"
+                                    ToolTipService.ToolTip="在文件管理器中打开备份存档目录">
+                                <FontIcon Glyph="&#xE838;" FontSize="14"/>
+                            </Button>
                             <!-- 删除游戏 -->
                             <Button Click="DeleteGame_Click"
                                     ToolTipService.ToolTip="删除游戏及所有存档">

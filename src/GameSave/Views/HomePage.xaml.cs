@@ -747,14 +747,16 @@ namespace GameSave.Views
                 gameCheckBox.Unchecked += (s, args) => detected.IsSelected = false;
                 headerPanel.Children.Add(gameCheckBox);
 
-                headerPanel.Children.Add(new TextBlock
+                // header 中的游戏名称文本（需要在编辑时同步更新）
+                var headerNameText = new TextBlock
                 {
                     Text = detected.Name,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
                     MaxWidth = 280,
                     TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis
-                });
+                };
+                headerPanel.Children.Add(headerNameText);
 
                 // 来源徽章
                 headerPanel.Children.Add(new Border
@@ -779,9 +781,13 @@ namespace GameSave.Views
                 // ---- Expander Content：表单字段 ----
                 var contentPanel = new StackPanel { Spacing = 10, Padding = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 0) };
 
-                // 游戏名称（可编辑）
+                // 游戏名称（可编辑，修改后同步更新 header 显示）
                 var nameBox = new TextBox { Header = "游戏名称", Text = detected.Name };
-                nameBox.TextChanged += (s, args) => detected.Name = nameBox.Text;
+                nameBox.TextChanged += (s, args) =>
+                {
+                    detected.Name = nameBox.Text;
+                    headerNameText.Text = nameBox.Text;
+                };
                 contentPanel.Children.Add(nameBox);
 
                 // 启动进程（已自动检测 / 未检测到时允许手动选择）
@@ -1068,6 +1074,37 @@ namespace GameSave.Views
                 {
                     await ShowMessageAsync("导入成功", message);
                 }
+            }
+        }
+
+        #endregion
+
+        #region 打开存档目录
+
+        /// <summary>打开备份存档所在的工作目录</summary>
+        private async void OpenBackupFolder_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (ViewModel.SelectedGame == null) return;
+
+            try
+            {
+                var backupDir = App.ConfigService.GetGameWorkDirectory(ViewModel.SelectedGame.Id);
+                if (Directory.Exists(backupDir))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = backupDir,
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    await ShowMessageAsync("提示", "该游戏的备份存档目录尚不存在，请先进行一次备份。");
+                }
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("打开失败", $"无法打开存档目录: {ex.Message}");
             }
         }
 
