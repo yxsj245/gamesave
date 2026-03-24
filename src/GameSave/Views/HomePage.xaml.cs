@@ -141,6 +141,8 @@ namespace GameSave.Views
             {
                 ViewModel.SearchKeyword = sender.Text;
                 UpdateEmptyState();
+                // 搜索状态下禁用拖拽排序（搜索结果中排序无意义）
+                UpdateDragReorderState();
             }
         }
 
@@ -149,6 +151,152 @@ namespace GameSave.Views
         {
             ViewModel.SearchKeyword = args.QueryText;
             UpdateEmptyState();
+            UpdateDragReorderState();
+        }
+
+        #endregion
+
+        #region 拖拽排序
+
+        /// <summary>正在拖拽的游戏对象</summary>
+        private Game? _draggedGame;
+
+        /// <summary>根据搜索状态切换拖拽排序的启用/禁用</summary>
+        private void UpdateDragReorderState()
+        {
+            var isSearching = !string.IsNullOrEmpty(ViewModel.SearchKeyword?.Trim());
+            GamesList.CanDragItems = !isSearching;
+            GamesList.AllowDrop = !isSearching;
+        }
+
+        /// <summary>拖拽开始：记录被拖拽的游戏</summary>
+        private void GamesList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+        {
+            if (e.Items.Count > 0 && e.Items[0] is Game game)
+            {
+                _draggedGame = game;
+                e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+            }
+        }
+
+        /// <summary>
+        /// 根据鼠标位置计算目标插入索引，以及指示线应显示的 Y 坐标
+        /// </summary>
+        private (int targetIndex, double indicatorY) GetDropTargetInfo(DragEventArgs e)
+        {
+            var filteredGames = ViewModel.FilteredGames;
+            var position = e.GetPosition(GamesList);
+
+            // 遍历列表项，找到目标插入位置
+            for (int i = 0; i < filteredGames.Count; i++)
+            {
+                var container = GamesList.ContainerFromIndex(i) as ListViewItem;
+                if (container == null) continue;
+
+                var itemTransform = container.TransformToVisual(GamesList);
+                var itemPosition = itemTransform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                var itemHeight = container.ActualHeight;
+
+                // 如果放置点在该项的上半部分，则插入到该项之前
+                if (position.Y < itemPosition.Y + itemHeight / 2)
+                {
+                    return (i, itemPosition.Y);
+                }
+            }
+
+            // 放到最末尾：获取最后一项的底部位置
+            var lastContainer = GamesList.ContainerFromIndex(filteredGames.Count - 1) as ListViewItem;
+            if (lastContainer != null)
+            {
+                var lastTransform = lastContainer.TransformToVisual(GamesList);
+                var lastPosition = lastTransform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                return (filteredGames.Count - 1, lastPosition.Y + lastContainer.ActualHeight);
+            }
+
+            return (filteredGames.Count - 1, 0);
+        }
+
+        /// <summary>显示拖拽指示线到指定 Y 坐标</summary>
+        private void ShowDragIndicator(double y)
+        {
+            DragIndicatorLine.Width = GamesList.ActualWidth;
+            Canvas.SetLeft(DragIndicatorLine, 0);
+            Canvas.SetTop(DragIndicatorLine, y - 1.5); // 居中于目标线
+            DragIndicatorLine.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        }
+
+        /// <summary>隐藏拖拽指示线</summary>
+        private void HideDragIndicator()
+        {
+            DragIndicatorLine.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+
+        /// <summary>拖拽经过：设置放置效果并更新指示线位置</summary>
+        private void GamesList_DragOver(object sender, DragEventArgs e)
+        {
+            if (_draggedGame == null) return;
+
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+
+            // 更新指示线位置
+            var (_, indicatorY) = GetDropTargetInfo(e);
+            ShowDragIndicator(indicatorY);
+        }
+
+        /// <summary>放下：计算目标位置并移动游戏</summary>
+        private void GamesList_Drop(object sender, DragEventArgs e)
+        {
+            HideDragIndicator();
+
+            if (_draggedGame == null) return;
+
+            var filteredGames = ViewModel.FilteredGames;
+            var oldIndex = filteredGames.IndexOf(_draggedGame);
+            if (oldIndex < 0) return;
+
+            var (newIndex, _) = GetDropTargetInfo(e);
+
+            if (oldIndex == newIndex) return;
+
+            // 在 FilteredGames 中移动
+            filteredGames.RemoveAt(oldIndex);
+            // 如果新位置在旧位置之后，移除旧项后索引需要调整
+            if (newIndex > oldIndex) newIndex = Math.Min(newIndex, filteredGames.Count);
+            filteredGames.Insert(newIndex, _draggedGame);
+        }
+
+        /// <summary>拖拽完成后，将新顺序同步到 Games 并持久化</summary>
+        private async void GamesList_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            HideDragIndicator();
+
+            if (_draggedGame == null) return;
+
+            try
+            {
+                // 将 FilteredGames 的新顺序同步回 Games 主列表
+                var newOrder = ViewModel.FilteredGames.ToList();
+
+                ViewModel.Games.Clear();
+                foreach (var game in newOrder)
+                {
+                    ViewModel.Games.Add(game);
+                }
+
+                // 持久化新顺序到配置文件
+                var orderedIds = ViewModel.Games.Select(g => g.Id).ToList();
+                await App.ConfigService.ReorderGamesAsync(orderedIds);
+
+                System.Diagnostics.Debug.WriteLine($"[拖拽排序] 已持久化新顺序，共 {orderedIds.Count} 个游戏");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[拖拽排序] 持久化失败: {ex.Message}");
+            }
+            finally
+            {
+                _draggedGame = null;
+            }
         }
 
         #endregion

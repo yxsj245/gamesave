@@ -78,6 +78,9 @@ public class Game : INotifyPropertyChanged
     /// <summary>关联的云端服务商配置 ID（可选）</summary>
     public string? CloudConfigId { get; set; }
 
+    /// <summary>排序顺序（用于拖拽排序持久化，值越小越靠前）</summary>
+    public int SortOrder { get; set; } = 0;
+
     /// <summary>添加时间</summary>
     public DateTime AddedAt { get; set; } = DateTime.Now;
 

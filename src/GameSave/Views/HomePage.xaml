@@ -123,6 +123,12 @@
                   x:Name="GamesList"
                   ItemsSource="{x:Bind ViewModel.FilteredGames, Mode=OneWay}"
                   SelectionMode="None"
+                  CanDragItems="True"
+                  AllowDrop="True"
+                  DragItemsStarting="GamesList_DragItemsStarting"
+                  DragItemsCompleted="GamesList_DragItemsCompleted"
+                  DragOver="GamesList_DragOver"
+                  Drop="GamesList_Drop"
                   Tapped="GamesList_Tapped"
                   HorizontalAlignment="Stretch">
             <ListView.ItemContainerStyle>
@@ -323,6 +329,20 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+
+        <!-- 拖拽排序指示线 -->
+        <Canvas x:Name="DragIndicatorCanvas" Grid.Row="1" IsHitTestVisible="False">
+            <Border x:Name="DragIndicatorLine"
+                    Height="3"
+                    CornerRadius="2"
+                    Background="{ThemeResource SystemAccentColor}"
+                    Visibility="Collapsed"
+                    Opacity="0.9">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="DragIndicatorTranslate" />
+                </Border.RenderTransform>
+            </Border>
+        </Canvas>
 
         <!-- 游戏详情浮层 (Overlay) -->
         <Grid x:Name="DetailsOverlay" Grid.Row="0" Grid.RowSpan="2" 

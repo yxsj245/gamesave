@@ -236,7 +236,8 @@ public partial class MainViewModel : BaseViewModel
     private void LoadGamesFromConfig()
     {
         Games.Clear();
-        foreach (var game in _configService.GetAllGames())
+        // 按 SortOrder 排序加载游戏列表
+        foreach (var game in _configService.GetAllGames().OrderBy(g => g.SortOrder))
         {
             Games.Add(game);
         }
@@ -271,6 +272,29 @@ public partial class MainViewModel : BaseViewModel
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// 拖拽排序后移动游戏位置并持久化
+    /// </summary>
+    /// <param name="oldIndex">原始位置</param>
+    /// <param name="newIndex">新位置</param>
+    public async Task MoveGameAsync(int oldIndex, int newIndex)
+    {
+        if (oldIndex < 0 || oldIndex >= Games.Count || newIndex < 0 || newIndex >= Games.Count || oldIndex == newIndex)
+            return;
+
+        // 在内存中移动
+        var game = Games[oldIndex];
+        Games.RemoveAt(oldIndex);
+        Games.Insert(newIndex, game);
+
+        // 更新 SortOrder 并持久化到配置
+        var orderedIds = Games.Select(g => g.Id).ToList();
+        await _configService.ReorderGamesAsync(orderedIds);
+
+        // 刷新过滤列表
+        ApplySearchFilter();
     }
 
     /// <summary>

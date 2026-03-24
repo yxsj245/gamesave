@@ -366,6 +366,24 @@ public class ConfigService
         await SaveConfigAsync();
     }
 
+    /// <summary>重新排列游戏列表顺序（用于拖拽排序后持久化）</summary>
+    public async Task ReorderGamesAsync(List<string> orderedGameIds)
+    {
+        // 按传入的 ID 顺序重新设置 SortOrder
+        for (int i = 0; i < orderedGameIds.Count; i++)
+        {
+            var game = _config.Games.FirstOrDefault(g => g.Id == orderedGameIds[i]);
+            if (game != null)
+            {
+                game.SortOrder = i;
+            }
+        }
+
+        // 按 SortOrder 重新排列内存中的游戏列表
+        _config.Games = _config.Games.OrderBy(g => g.SortOrder).ToList();
+        await SaveConfigAsync();
+    }
+
     #endregion
 
     #region 云配置管理
