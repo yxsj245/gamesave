@@ -62,17 +62,29 @@ public class GameService
     /// <summary>自动备份失败时触发的事件（参数为游戏名称和错误信息）</summary>
     public event EventHandler<(string GameName, string ErrorMessage)>? BackupFailed;
 
+    /// <summary>进程启动失败/崩溃时触发的事件（参数为错误信息）</summary>
+    public event EventHandler<string>? ProcessLaunchFailed;
+
     /// <summary>当前是否有游戏正在运行</summary>
     public bool IsGameRunning { get; private set; }
 
     /// <summary>当前运行中的游戏 ID</summary>
     public string? RunningGameId { get; private set; }
 
-    /// <summary>当前运行中的进程 PID</summary>
+    /// <summary>当前运行中的主进程 PID</summary>
     public int RunningProcessId { get; private set; }
 
-    /// <summary>当前运行中的进程名（不含扩展名，用于 Steam 游戏场景下通过进程名结束进程）</summary>
+    /// <summary>当前运行中的所有进程 PID 列表</summary>
+    public List<int> RunningProcessIds { get; private set; } = new();
+
+    /// <summary>当前运行中的主进程名（不含扩展名）</summary>
     public string? RunningProcessName { get; private set; }
+
+    /// <summary>当前运行中的所有进程名列表</summary>
+    public List<string> RunningProcessNames { get; private set; } = new();
+
+    /// <summary>最近一次启动失败的错误信息（用于 ViewModel 读取显示）</summary>
+    public string? LastLaunchError { get; private set; }
 
     public GameService(ConfigService configService, LocalStorageService localStorageService, ProcessMonitorService processMonitorService)
     {
@@ -133,6 +145,9 @@ public class GameService
     {
         if (string.IsNullOrWhiteSpace(game.ProcessPath))
             throw new InvalidOperationException("未设置游戏启动进程路径");
+
+        // 清除上次启动错误
+        LastLaunchError = null;
 
         // 通知：开始启动游戏流程
         game.LaunchStatusMessage = $"正在检查本地存档...";
@@ -254,7 +269,7 @@ public class GameService
             }
         }
 
-        // 2. 启动游戏进程
+        // 2. 启动游戏进程（支持多进程顺序启动）
         game.LaunchStatusMessage = "正在启动游戏...";
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
@@ -265,16 +280,53 @@ public class GameService
             Progress = 90
         });
 
-        var process = _processMonitorService.LaunchProcess(game.ProcessPath, game.ProcessArgs);
+        var processEntries = game.AllProcessEntries;
+        System.Diagnostics.Process? process = null;
+        List<System.Diagnostics.Process> allProcesses = new();
+
+        if (processEntries.Count > 1)
+        {
+            // 多进程模式：顺序启动，前一个成功后再启动下一个
+            var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(processEntries);
+            if (!multiResult.Success)
+            {
+                // 启动失败，通知 UI 层弹窗
+                game.LaunchStatusMessage = string.Empty;
+                StatusChanged?.Invoke(this, new GameStatusInfo
+                {
+                    Status = GameRunStatus.Idle,
+                    GameName = game.Name,
+                    GameId = game.Id,
+                    Message = multiResult.ErrorMessage ?? "启动失败"
+                });
+                LastLaunchError = multiResult.ErrorMessage;
+                ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
+                return false;
+            }
+            allProcesses = multiResult.LaunchedProcesses;
+            process = allProcesses.FirstOrDefault();
+        }
+        else
+        {
+            // 单进程模式：保持原有逻辑
+            process = _processMonitorService.LaunchProcess(game.ProcessPath, game.ProcessArgs);
+            if (process == null)
+                throw new InvalidOperationException("启动游戏进程失败");
+            allProcesses.Add(process);
+        }
+
         if (process == null)
             throw new InvalidOperationException("启动游戏进程失败");
 
         IsGameRunning = true;
         RunningGameId = game.Id;
         RunningProcessId = process.Id;
+        RunningProcessIds = allProcesses.Select(p => p.Id).ToList();
         RunningProcessName = process.ProcessName;
+        RunningProcessNames = allProcesses.Select(p => p.ProcessName).ToList();
         game.IsRunning = true;
-        game.RunningPid = process.Id; // 设置进程 PID 供列表项显示
+        game.RunningPid = process.Id; // 设置主进程 PID 供列表项显示
+        game.RunningPids = allProcesses.Select(p => p.Id).ToList(); // 设置所有进程 PID
         game.LaunchStatusMessage = string.Empty; // 启动完成，清空启动状态消息
 
         // 启动定时备份（如果已配置）
@@ -283,27 +335,43 @@ public class GameService
             ScheduledBackup.StartScheduledBackup(game);
         }
 
-        // 通知：游戏运行中（启动完成，进度100%）
+        // 通知：游戏运行中（启动完成）
+        var pidDisplay = allProcesses.Count > 1
+            ? string.Join(", ", allProcesses.Select(p => p.Id))
+            : process.Id.ToString();
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Running,
             GameName = game.Name,
             GameId = game.Id,
             ProcessId = process.Id,
-            Message = $"游戏 {game.Name} 运行中 (PID: {process.Id})"
+            Message = $"游戏 {game.Name} 运行中 (PID: {pidDisplay})"
         });
 
-        // 3. 后台监测进程退出
+        // 3. 后台监测进程退出（支持多进程，所有进程全部退出后再备份）
+        var capturedProcesses = new List<System.Diagnostics.Process>(allProcesses);
         _ = Task.Run(async () =>
         {
-            var exitType = await _processMonitorService.WaitForExitAsync(process);
-            // 监测完成后释放 Process 对象的操作系统句柄，防止内存泄漏
-            process.Dispose();
+            ProcessExitType exitType;
+            if (capturedProcesses.Count > 1)
+            {
+                // 多进程：等待所有进程退出
+                exitType = await _processMonitorService.WaitForAllProcessesExitAsync(capturedProcesses);
+                // Process 对象已在 WaitForAllProcessesExitAsync 内部释放
+            }
+            else
+            {
+                // 单进程：保持原有逻辑
+                exitType = await _processMonitorService.WaitForExitAsync(process);
+                process.Dispose();
+            }
 
             IsGameRunning = false;
             RunningGameId = null;
             RunningProcessId = 0;
+            RunningProcessIds.Clear();
             RunningProcessName = null;
+            RunningProcessNames.Clear();
 
             // 停止定时备份
             ScheduledBackup.StopScheduledBackup(game.Id);

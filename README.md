@@ -167,7 +167,7 @@ cd gamesave
 dotnet restore src/GameSave/GameSave.csproj
 
 # 编译运行（Debug 模式）
-dotnet run --project src/GameSave/GameSave.csproj
+dotnet run --project src/GameSave/GameSave.csproj -r win-x64
 
 # 或构建 MSI 安装包
 .\build-msi.ps1 -Platform x64 -Version 1.0.0

@@ -49,6 +49,202 @@ public class ProcessMonitorService
     public event EventHandler<int>? ProcessExited;
 
     /// <summary>
+    /// 多进程顺序启动结果
+    /// </summary>
+    public class MultiProcessLaunchResult
+    {
+        /// <summary>是否全部启动成功</summary>
+        public bool Success { get; set; }
+
+        /// <summary>已成功启动的进程列表</summary>
+        public List<Process> LaunchedProcesses { get; set; } = new();
+
+        /// <summary>失败时的错误信息</summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>失败时崩溃的进程路径名</summary>
+        public string? FailedProcessName { get; set; }
+    }
+
+    /// <summary>
+    /// 顺序启动多个进程。
+    /// 按顺序依次启动每个进程，前一个成功捕获 PID 后再启动下一个。
+    /// 如果任何进程在 5 秒内退出，视为崩溃并终止后续启动。
+    /// </summary>
+    /// <param name="processEntries">进程路径和参数列表（按优先级排序）</param>
+    /// <returns>启动结果</returns>
+    public async Task<MultiProcessLaunchResult> LaunchMultipleProcessesAsync(
+        List<(string Path, string? Args)> processEntries)
+    {
+        var result = new MultiProcessLaunchResult();
+
+        foreach (var (processPath, args) in processEntries)
+        {
+            var processName = Path.GetFileNameWithoutExtension(processPath);
+
+            try
+            {
+                var process = LaunchProcess(processPath, args);
+                if (process == null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"启动进程 {processName} 失败：无法创建进程";
+                    result.FailedProcessName = processName;
+                    // 清理已启动的进程
+                    CleanupProcesses(result.LaunchedProcesses);
+                    return result;
+                }
+
+                // 等待一小段时间检测进程是否立即崩溃（5秒内退出）
+                var startTime = DateTime.Now;
+                bool exitedQuickly = false;
+
+                try
+                {
+                    // 等待 5 秒，看进程是否快速退出
+                    await process.WaitForExitAsync(new CancellationTokenSource(StubExitThresholdSeconds * 1000).Token);
+                    // 如果到达这里，说明进程在 5 秒内退出了
+                    var elapsed = DateTime.Now - startTime;
+                    exitedQuickly = elapsed.TotalSeconds < StubExitThresholdSeconds;
+
+                    if (exitedQuickly)
+                    {
+                        // 进程在 5 秒内退出，视为崩溃
+                        Debug.WriteLine($"[多进程启动] 进程 {processName} 在 {elapsed.TotalSeconds:F1} 秒内退出，视为崩溃");
+                        result.Success = false;
+                        result.ErrorMessage = $"检测到 {processName} 进程启动失败或崩溃（启动后 {elapsed.TotalSeconds:F0} 秒退出），本次监控周期将终止，请您排查后再次运行。";
+                        result.FailedProcessName = processName;
+                        process.Dispose();
+                        CleanupProcesses(result.LaunchedProcesses);
+                        return result;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // 超时说明进程还在运行，这是正常的
+                    Debug.WriteLine($"[多进程启动] 进程 {processName} (PID: {process.Id}) 启动成功，5秒内未退出");
+                }
+
+                result.LaunchedProcesses.Add(process);
+                Debug.WriteLine($"[多进程启动] 进程 {processName} (PID: {process.Id}) 已加入监测列表");
+            }
+            catch (FileNotFoundException)
+            {
+                result.Success = false;
+                result.ErrorMessage = $"进程文件不存在: {processPath}";
+                result.FailedProcessName = processName;
+                CleanupProcesses(result.LaunchedProcesses);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                result.Success = false;
+                result.ErrorMessage = $"启动进程 {processName} 失败: {ex.Message}";
+                result.FailedProcessName = processName;
+                CleanupProcesses(result.LaunchedProcesses);
+                return result;
+            }
+        }
+
+        result.Success = true;
+        return result;
+    }
+
+    /// <summary>
+    /// 等待所有已启动的进程退出。
+    /// 支持 Steam stub 检测逻辑，所有进程全部退出后才返回。
+    /// </summary>
+    /// <param name="processes">要监测的进程列表</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>进程退出类型</returns>
+    public async Task<ProcessExitType> WaitForAllProcessesExitAsync(
+        List<Process> processes, CancellationToken cancellationToken = default)
+    {
+        if (processes.Count == 0)
+            return ProcessExitType.Normal;
+
+        // 如果只有一个进程，使用原有的单进程监测逻辑
+        if (processes.Count == 1)
+        {
+            return await WaitForExitAsync(processes[0], cancellationToken);
+        }
+
+        // 多进程场景：并行等待所有进程退出
+        var tasks = new List<Task<ProcessExitType>>();
+        foreach (var process in processes)
+        {
+            tasks.Add(WaitForSingleProcessExitNoStubAsync(process, cancellationToken));
+        }
+
+        var results = await Task.WhenAll(tasks);
+
+        // 释放所有 Process 对象
+        foreach (var process in processes)
+        {
+            try { process.Dispose(); } catch { }
+        }
+
+        // 如果任何一个被取消，返回取消
+        if (results.Any(r => r == ProcessExitType.Cancelled))
+            return ProcessExitType.Cancelled;
+
+        // 如果任何一个崩溃，返回崩溃
+        if (results.Any(r => r == ProcessExitType.CrashOrNotLaunched))
+            return ProcessExitType.CrashOrNotLaunched;
+
+        // 所有进程正常退出
+        ProcessExited?.Invoke(this, 0);
+        return ProcessExitType.Normal;
+    }
+
+    /// <summary>
+    /// 等待单个进程退出（不做 Steam stub 检测，用于多进程场景）
+    /// </summary>
+    private async Task<ProcessExitType> WaitForSingleProcessExitNoStubAsync(
+        Process process, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            Debug.WriteLine($"[多进程监测] 进程 {process.ProcessName} (PID: {process.Id}) 已退出");
+            return ProcessExitType.Normal;
+        }
+        catch (OperationCanceledException)
+        {
+            return ProcessExitType.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[多进程监测] 等待进程退出异常: {ex.Message}");
+            return ProcessExitType.Normal;
+        }
+    }
+
+    /// <summary>
+    /// 清理已启动的进程（当后续进程启动失败时，结束前面已启动的进程）
+    /// </summary>
+    private static void CleanupProcesses(List<Process> processes)
+    {
+        foreach (var p in processes)
+        {
+            try
+            {
+                if (!p.HasExited)
+                {
+                    p.Kill(true);
+                    Debug.WriteLine($"[多进程清理] 已终止进程 {p.ProcessName} (PID: {p.Id})");
+                }
+            }
+            catch { }
+            finally
+            {
+                try { p.Dispose(); } catch { }
+            }
+        }
+        processes.Clear();
+    }
+
+    /// <summary>
     /// 启动游戏进程并监测其生命周期
     /// </summary>
     /// <param name="processPath">可执行文件路径</param>

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 using GameSave.Helpers;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -75,6 +76,12 @@ public class Game : INotifyPropertyChanged
     /// <summary>启动附加参数（可选）</summary>
     public string? ProcessArgs { get; set; }
 
+    /// <summary>第二启动进程路径（可选，最多支持两个启动进程）</summary>
+    public string? SecondaryProcessPath { get; set; }
+
+    /// <summary>第二启动进程附加参数（可选）</summary>
+    public string? SecondaryProcessArgs { get; set; }
+
     /// <summary>关联的云端服务商配置 ID（可选）</summary>
     public string? CloudConfigId { get; set; }
 
@@ -137,6 +144,25 @@ public class Game : INotifyPropertyChanged
     [JsonIgnore]
     public bool HasProcessPath => !string.IsNullOrWhiteSpace(ProcessPath);
 
+    /// <summary>是否设置了第二启动进程路径</summary>
+    [JsonIgnore]
+    public bool HasSecondaryProcessPath => !string.IsNullOrWhiteSpace(SecondaryProcessPath);
+
+    /// <summary>获取所有配置的启动进程路径（按顺序）</summary>
+    [JsonIgnore]
+    public List<(string Path, string? Args)> AllProcessEntries
+    {
+        get
+        {
+            var entries = new List<(string Path, string? Args)>();
+            if (HasProcessPath)
+                entries.Add((ProcessPath!, ProcessArgs));
+            if (HasSecondaryProcessPath)
+                entries.Add((SecondaryProcessPath!, SecondaryProcessArgs));
+            return entries;
+        }
+    }
+
     private BitmapImage? _gameIconSource;
     /// <summary>从游戏 EXE 提取的图标（缓存后返回 BitmapImage）</summary>
     [JsonIgnore]
@@ -184,6 +210,8 @@ public class Game : INotifyPropertyChanged
                 {
                     IsStopping = false;
                     RunningPid = 0;
+                    RunningPids.Clear();
+                    OnPropertyChanged(nameof(DisplayRunningPid));
                 }
                 // 同时通知启动/停止按钮可见性变化
                 OnPropertyChanged(nameof(CanShowStartButton));
@@ -193,7 +221,7 @@ public class Game : INotifyPropertyChanged
     }
 
     private int _runningPid;
-    /// <summary>当前运行的进程 PID</summary>
+    /// <summary>当前运行的主进程 PID</summary>
     [JsonIgnore]
     public int RunningPid
     {
@@ -209,9 +237,33 @@ public class Game : INotifyPropertyChanged
         }
     }
 
-    /// <summary>显示用的进程 PID 文本</summary>
+    private List<int> _runningPids = new();
+    /// <summary>当前运行的所有进程 PID 列表</summary>
     [JsonIgnore]
-    public string DisplayRunningPid => RunningPid > 0 ? $"PID: {RunningPid}" : string.Empty;
+    public List<int> RunningPids
+    {
+        get => _runningPids;
+        set
+        {
+            _runningPids = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DisplayRunningPid));
+        }
+    }
+
+    /// <summary>显示用的进程 PID 文本（多个PID用逗号分隔）</summary>
+    [JsonIgnore]
+    public string DisplayRunningPid
+    {
+        get
+        {
+            if (RunningPids.Count > 1)
+                return $"PID: {string.Join(", ", RunningPids)}";
+            if (RunningPid > 0)
+                return $"PID: {RunningPid}";
+            return string.Empty;
+        }
+    }
 
     private string _launchStatusMessage = string.Empty;
     /// <summary>启动进度状态消息（在列表项启动按钮左侧显示）</summary>

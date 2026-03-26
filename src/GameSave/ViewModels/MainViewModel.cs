@@ -172,6 +172,22 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _newGameProcessArgs, value);
     }
 
+    // 第二启动进程路径
+    private string _newGameSecondaryProcessPath = string.Empty;
+    public string NewGameSecondaryProcessPath
+    {
+        get => _newGameSecondaryProcessPath;
+        set => SetProperty(ref _newGameSecondaryProcessPath, value);
+    }
+
+    // 第二启动进程参数
+    private string _newGameSecondaryProcessArgs = string.Empty;
+    public string NewGameSecondaryProcessArgs
+    {
+        get => _newGameSecondaryProcessArgs;
+        set => SetProperty(ref _newGameSecondaryProcessArgs, value);
+    }
+
     // 云端服务商配置列表（供添加游戏表单下拉框使用）
     private ObservableCollection<CloudConfig> _cloudConfigs = new();
     public ObservableCollection<CloudConfig> CloudConfigs
@@ -367,6 +383,8 @@ public partial class MainViewModel : BaseViewModel
         NewGameSavePaths = new List<string>();
         NewGameProcessPath = string.Empty;
         NewGameProcessArgs = string.Empty;
+        NewGameSecondaryProcessPath = string.Empty;
+        NewGameSecondaryProcessArgs = string.Empty;
         SelectedCloudConfigId = null;
         NewGameScheduledBackupEnabled = false;
         NewGameScheduledBackupInterval = 30;
@@ -404,6 +422,8 @@ public partial class MainViewModel : BaseViewModel
                     .ToList(),
                 ProcessPath = string.IsNullOrWhiteSpace(NewGameProcessPath) ? null : NewGameProcessPath.Trim(),
                 ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
+                SecondaryProcessPath = string.IsNullOrWhiteSpace(NewGameSecondaryProcessPath) ? null : NewGameSecondaryProcessPath.Trim(),
+                SecondaryProcessArgs = string.IsNullOrWhiteSpace(NewGameSecondaryProcessArgs) ? null : NewGameSecondaryProcessArgs.Trim(),
                 CloudConfigId = SelectedCloudConfigId,
                 IconPath = "\uE7FC",
                 ScheduledBackupEnabled = NewGameScheduledBackupEnabled,
@@ -591,7 +611,15 @@ public partial class MainViewModel : BaseViewModel
         try
         {
             var result = await _gameService.LaunchGameAsync(SelectedGame);
-            StatusMessage = result ? "游戏已启动，退出后将自动备份" : "启动取消";
+            if (result)
+            {
+                StatusMessage = "游戏已启动，退出后将自动备份";
+            }
+            else
+            {
+                // 读取启动失败的详细错误信息
+                StatusMessage = _gameService.LastLaunchError ?? "启动取消";
+            }
             return (result, StatusMessage);
         }
         catch (Exception ex)
@@ -645,22 +673,48 @@ public partial class MainViewModel : BaseViewModel
             // 在后台线程执行进程结束操作，避免阻塞 UI
             await Task.Run(() =>
             {
-                // 1. 先尝试通过 PID 结束
-                if (_gameService.RunningProcessId != 0)
+                // 1. 先尝试通过所有 PID 结束（支持多进程）
+                foreach (var pid in _gameService.RunningProcessIds)
+                {
+                    if (pid != 0)
+                    {
+                        ProcessMonitorService.StopProcess(pid);
+                    }
+                }
+                // 兼容单进程场景
+                if (_gameService.RunningProcessIds.Count == 0 && _gameService.RunningProcessId != 0)
                 {
                     ProcessMonitorService.StopProcess(_gameService.RunningProcessId);
                 }
 
-                // 2. 再尝试通过进程名结束（覆盖 Steam 游戏 stub 进程已退出、真实游戏进程 PID 不同的场景）
-                if (!string.IsNullOrEmpty(_gameService.RunningProcessName))
+                // 2. 再尝试通过所有进程名结束（覆盖 Steam 游戏 stub 进程已退出、真实游戏进程 PID 不同的场景）
+                foreach (var name in _gameService.RunningProcessNames)
                 {
-                    ProcessMonitorService.StopProcessByName(_gameService.RunningProcessName);
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        ProcessMonitorService.StopProcessByName(name);
+                    }
                 }
-                // 3. 最后通过游戏配置的进程路径名称兜底
-                else if (!string.IsNullOrWhiteSpace(game.ProcessPath))
+                // 兼容单进程场景
+                if (_gameService.RunningProcessNames.Count == 0)
                 {
-                    var processName = System.IO.Path.GetFileNameWithoutExtension(game.ProcessPath);
-                    ProcessMonitorService.StopProcessByName(processName);
+                    if (!string.IsNullOrEmpty(_gameService.RunningProcessName))
+                    {
+                        ProcessMonitorService.StopProcessByName(_gameService.RunningProcessName);
+                    }
+                    // 3. 最后通过游戏配置的进程路径名称兜底
+                    else if (!string.IsNullOrWhiteSpace(game.ProcessPath))
+                    {
+                        var processName = System.IO.Path.GetFileNameWithoutExtension(game.ProcessPath);
+                        ProcessMonitorService.StopProcessByName(processName);
+                    }
+                }
+
+                // 4. 通过第二进程路径名称兜底
+                if (!string.IsNullOrWhiteSpace(game.SecondaryProcessPath))
+                {
+                    var secondaryName = System.IO.Path.GetFileNameWithoutExtension(game.SecondaryProcessPath);
+                    ProcessMonitorService.StopProcessByName(secondaryName);
                 }
             });
         }
@@ -687,7 +741,14 @@ public partial class MainViewModel : BaseViewModel
         try
         {
             var result = await _gameService.LaunchGameAsync(game);
-            StatusMessage = result ? "游戏已启动，退出后将自动备份" : "启动取消";
+            if (result)
+            {
+                StatusMessage = "游戏已启动，退出后将自动备份";
+            }
+            else
+            {
+                StatusMessage = _gameService.LastLaunchError ?? "启动取消";
+            }
             return (result, StatusMessage);
         }
         catch (Exception ex)

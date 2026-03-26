@@ -16,6 +16,8 @@ namespace GameSave.Views
 
             // 监听游戏崩溃检测事件，弹窗提示用户（使用具名方法，确保可取消订阅）
             App.GameService.GameCrashDetected += OnGameCrashDetected;
+            // 监听进程启动失败/崩溃事件（多进程场景）
+            App.GameService.ProcessLaunchFailed += OnProcessLaunchFailed;
         }
 
         public MainViewModel ViewModel { get; } = new MainViewModel();
@@ -39,6 +41,7 @@ namespace GameSave.Views
         {
             base.OnNavigatedFrom(e);
             App.GameService.GameCrashDetected -= OnGameCrashDetected;
+            App.GameService.ProcessLaunchFailed -= OnProcessLaunchFailed;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Cleanup();
         }
@@ -62,6 +65,28 @@ namespace GameSave.Views
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine($"[HomePage] 崩溃提示弹窗异常: {ex.Message}");
+                    }
+                });
+            }
+        }
+
+        /// <summary>进程启动失败/崩溃事件处理（多进程场景下某个进程在5秒内退出）</summary>
+        private async void OnProcessLaunchFailed(object? sender, string errorMessage)
+        {
+            var dispatcherQueue = App.MainWindow?.DispatcherQueue;
+            if (dispatcherQueue != null)
+            {
+                dispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        // 显示主窗口（从托盘还原）
+                        App.RestoreMainWindow();
+                        await ShowMessageAsync("⚠️ 进程启动失败", errorMessage);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[HomePage] 进程启动失败提示弹窗异常: {ex.Message}");
                     }
                 });
             }
@@ -602,17 +627,42 @@ namespace GameSave.Views
             // 加号按钮点击事件
             addPathBtn.Click += (s, args) => AddSavePathRow();
 
-            // 启动进程（可选）
+            // ========== 启动进程组 ==========
+            panel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 4)
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "启动进程",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
+
+            // 主启动进程（可选）
             var processPathPanel = new Grid();
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var processPathBox = new TextBox
             {
-                Header = "游戏启动进程（可选）",
-                PlaceholderText = "输入路径或点击浏览选择文件"
+                Header = "主启动进程（可选）",
+                PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式"
             };
             Grid.SetColumn(processPathBox, 0);
+
+            // 启动参数（可选）
+            var argsBox = new TextBox
+            {
+                Header = "主进程启动参数（可选）",
+                PlaceholderText = "例如: -windowed -dx12"
+            };
 
             var browseProcessBtn = new Button
             {
@@ -625,6 +675,7 @@ namespace GameSave.Views
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
                 picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add(".lnk");
                 picker.FileTypeFilter.Add("*");
 
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
@@ -633,7 +684,27 @@ namespace GameSave.Views
                 var file = await picker.PickSingleFileAsync();
                 if (file != null)
                 {
-                    processPathBox.Text = file.Path;
+                    // 如果选择了快捷方式，自动解析目标路径和参数
+                    if (ShortcutHelper.IsShortcut(file.Path))
+                    {
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
+                        {
+                            processPathBox.Text = shortcutInfo.TargetPath;
+                            if (!string.IsNullOrWhiteSpace(shortcutInfo.Arguments))
+                            {
+                                argsBox.Text = shortcutInfo.Arguments;
+                            }
+                        }
+                        else
+                        {
+                            await ShowMessageAsync("解析失败", "无法解析该快捷方式的目标路径，请手动选择 .exe 文件。");
+                        }
+                    }
+                    else
+                    {
+                        processPathBox.Text = file.Path;
+                    }
                 }
             };
             Grid.SetColumn(browseProcessBtn, 1);
@@ -642,13 +713,84 @@ namespace GameSave.Views
             processPathPanel.Children.Add(browseProcessBtn);
             panel.Children.Add(processPathPanel);
 
-            // 启动参数（可选）
-            var argsBox = new TextBox
+            panel.Children.Add(argsBox);
+
+            // 第二启动进程（可选）
+            var secondaryProcessPathPanel = new Grid();
+            secondaryProcessPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            secondaryProcessPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var secondaryProcessPathBox = new TextBox
             {
-                Header = "启动附加参数（可选）",
+                Header = "第二启动进程（可选，最多2个）",
+                PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式"
+            };
+            Grid.SetColumn(secondaryProcessPathBox, 0);
+
+            var secondaryArgsBox = new TextBox
+            {
+                Header = "第二进程启动参数（可选）",
                 PlaceholderText = "例如: -windowed -dx12"
             };
-            panel.Children.Add(argsBox);
+
+            var browseSecondaryProcessBtn = new Button
+            {
+                Content = "浏览",
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
+            };
+            browseSecondaryProcessBtn.Click += async (s, args) =>
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add(".lnk");
+                picker.FileTypeFilter.Add("*");
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                var file = await picker.PickSingleFileAsync();
+                if (file != null)
+                {
+                    if (ShortcutHelper.IsShortcut(file.Path))
+                    {
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
+                        {
+                            secondaryProcessPathBox.Text = shortcutInfo.TargetPath;
+                            if (!string.IsNullOrWhiteSpace(shortcutInfo.Arguments))
+                            {
+                                secondaryArgsBox.Text = shortcutInfo.Arguments;
+                            }
+                        }
+                        else
+                        {
+                            await ShowMessageAsync("解析失败", "无法解析该快捷方式的目标路径，请手动选择 .exe 文件。");
+                        }
+                    }
+                    else
+                    {
+                        secondaryProcessPathBox.Text = file.Path;
+                    }
+                }
+            };
+            Grid.SetColumn(browseSecondaryProcessBtn, 1);
+
+            secondaryProcessPathPanel.Children.Add(secondaryProcessPathBox);
+            secondaryProcessPathPanel.Children.Add(browseSecondaryProcessBtn);
+            panel.Children.Add(secondaryProcessPathPanel);
+
+            panel.Children.Add(secondaryArgsBox);
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "提示：多进程模式会按顺序启动，前一个进程启动成功后再启动下一个。所有进程退出后才会执行存档备份。",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
 
             // 云端服务商（可选）
             ComboBox? cloudConfigComboBox = null;
@@ -754,6 +896,8 @@ namespace GameSave.Views
                     .ToList();
                 ViewModel.NewGameProcessPath = processPathBox.Text;
                 ViewModel.NewGameProcessArgs = argsBox.Text;
+                ViewModel.NewGameSecondaryProcessPath = secondaryProcessPathBox.Text;
+                ViewModel.NewGameSecondaryProcessArgs = secondaryArgsBox.Text;
 
                 // 设置选中的云端配置 ID
                 if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
@@ -2064,18 +2208,43 @@ namespace GameSave.Views
 
             editAddPathBtn.Click += (s, args) => AddEditSavePathRow();
 
-            // 启动进程（可选）
+            // ========== 启动进程组 ==========
+            panel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+                Opacity = 0.3,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 8, 0, 4)
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "启动进程",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            });
+
+            // 主启动进程
             var processPathPanel = new Grid();
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var processPathBox = new TextBox
             {
-                Header = "游戏启动进程（可选）",
-                PlaceholderText = "输入路径或点击浏览选择文件",
+                Header = "主启动进程（可选）",
+                PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式",
                 Text = game.ProcessPath ?? string.Empty
             };
             Grid.SetColumn(processPathBox, 0);
+
+            var argsBox = new TextBox
+            {
+                Header = "主进程启动参数（可选）",
+                PlaceholderText = "例如: -windowed -dx12",
+                Text = game.ProcessArgs ?? string.Empty
+            };
 
             var browseProcessBtn = new Button
             {
@@ -2088,6 +2257,7 @@ namespace GameSave.Views
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
                 picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add(".lnk");
                 picker.FileTypeFilter.Add("*");
 
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
@@ -2096,7 +2266,26 @@ namespace GameSave.Views
                 var file = await picker.PickSingleFileAsync();
                 if (file != null)
                 {
-                    processPathBox.Text = file.Path;
+                    if (ShortcutHelper.IsShortcut(file.Path))
+                    {
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
+                        {
+                            processPathBox.Text = shortcutInfo.TargetPath;
+                            if (!string.IsNullOrWhiteSpace(shortcutInfo.Arguments))
+                            {
+                                argsBox.Text = shortcutInfo.Arguments;
+                            }
+                        }
+                        else
+                        {
+                            await ShowMessageAsync("解析失败", "无法解析该快捷方式的目标路径，请手动选择 .exe 文件。");
+                        }
+                    }
+                    else
+                    {
+                        processPathBox.Text = file.Path;
+                    }
                 }
             };
             Grid.SetColumn(browseProcessBtn, 1);
@@ -2105,14 +2294,77 @@ namespace GameSave.Views
             processPathPanel.Children.Add(browseProcessBtn);
             panel.Children.Add(processPathPanel);
 
-            // 启动参数（可选）
-            var argsBox = new TextBox
-            {
-                Header = "启动附加参数（可选）",
-                PlaceholderText = "例如: -windowed -dx12",
-                Text = game.ProcessArgs ?? string.Empty
-            };
             panel.Children.Add(argsBox);
+
+            // 第二启动进程
+            var editSecondaryProcessPathPanel = new Grid();
+            editSecondaryProcessPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            editSecondaryProcessPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var editSecondaryProcessPathBox = new TextBox
+            {
+                Header = "第二启动进程（可选，最多2个）",
+                PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式",
+                Text = game.SecondaryProcessPath ?? string.Empty
+            };
+            Grid.SetColumn(editSecondaryProcessPathBox, 0);
+
+            var editSecondaryArgsBox = new TextBox
+            {
+                Header = "第二进程启动参数（可选）",
+                PlaceholderText = "例如: -windowed -dx12",
+                Text = game.SecondaryProcessArgs ?? string.Empty
+            };
+
+            var browseEditSecondaryProcessBtn = new Button
+            {
+                Content = "浏览",
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Bottom,
+                Margin = new Microsoft.UI.Xaml.Thickness(8, 0, 0, 0)
+            };
+            browseEditSecondaryProcessBtn.Click += async (s, args) =>
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+                picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add(".lnk");
+                picker.FileTypeFilter.Add("*");
+
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                var file = await picker.PickSingleFileAsync();
+                if (file != null)
+                {
+                    if (ShortcutHelper.IsShortcut(file.Path))
+                    {
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
+                        {
+                            editSecondaryProcessPathBox.Text = shortcutInfo.TargetPath;
+                            if (!string.IsNullOrWhiteSpace(shortcutInfo.Arguments))
+                            {
+                                editSecondaryArgsBox.Text = shortcutInfo.Arguments;
+                            }
+                        }
+                        else
+                        {
+                            await ShowMessageAsync("解析失败", "无法解析该快捷方式的目标路径，请手动选择 .exe 文件。");
+                        }
+                    }
+                    else
+                    {
+                        editSecondaryProcessPathBox.Text = file.Path;
+                    }
+                }
+            };
+            Grid.SetColumn(browseEditSecondaryProcessBtn, 1);
+
+            editSecondaryProcessPathPanel.Children.Add(editSecondaryProcessPathBox);
+            editSecondaryProcessPathPanel.Children.Add(browseEditSecondaryProcessBtn);
+            panel.Children.Add(editSecondaryProcessPathPanel);
+
+            panel.Children.Add(editSecondaryArgsBox);
 
             // 云端服务商（可选）
             ComboBox? cloudConfigComboBox = null;
@@ -2267,6 +2519,8 @@ namespace GameSave.Views
                 game.SaveFolderPaths = newSavePaths;
                 game.ProcessPath = string.IsNullOrWhiteSpace(processPathBox.Text) ? null : processPathBox.Text.Trim();
                 game.ProcessArgs = string.IsNullOrWhiteSpace(argsBox.Text) ? null : argsBox.Text.Trim();
+                game.SecondaryProcessPath = string.IsNullOrWhiteSpace(editSecondaryProcessPathBox.Text) ? null : editSecondaryProcessPathBox.Text.Trim();
+                game.SecondaryProcessArgs = string.IsNullOrWhiteSpace(editSecondaryArgsBox.Text) ? null : editSecondaryArgsBox.Text.Trim();
 
                 if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
                 {

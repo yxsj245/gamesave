@@ -291,6 +291,21 @@ namespace GameSave
                     $"「{args.GameName}」的存档备份失败：{args.ErrorMessage}");
                 _gameLaunchedViaApp = false;
             };
+
+            // 订阅进程启动失败事件（多进程场景下某个进程5秒内退出）
+            GameService.ProcessLaunchFailed += (_, errorMessage) =>
+            {
+                if (!_gameLaunchedViaApp) return;
+
+                _trayIcon?.ShowBalloonTip("⚠️ 进程启动失败", errorMessage);
+
+                // 恢复主窗口以便用户查看错误详情
+                m_window?.DispatcherQueue?.TryEnqueue(() =>
+                {
+                    ShowMainWindow();
+                });
+                _gameLaunchedViaApp = false;
+            };
         }
 
         /// <summary>
