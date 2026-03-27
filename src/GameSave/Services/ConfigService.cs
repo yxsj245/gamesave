@@ -28,6 +28,9 @@ public class AppConfig
 
     /// <summary>是否已显示过首次使用欢迎弹窗</summary>
     public bool HasShownWelcome { get; set; } = false;
+
+    /// <summary>首页游戏列表展示模式</summary>
+    public HomeGameListViewMode HomeGameListViewMode { get; set; } = HomeGameListViewMode.List;
 }
 
 /// <summary>
@@ -129,6 +132,9 @@ public class ConfigService
     /// <summary>是否已显示过首次使用欢迎弹窗</summary>
     public bool HasShownWelcome => _config.HasShownWelcome;
 
+    /// <summary>首页游戏列表展示模式</summary>
+    public HomeGameListViewMode HomeGameListViewMode => _config.HomeGameListViewMode;
+
     /// <summary>
     /// 设置主题模式并保存配置
     /// </summary>
@@ -153,6 +159,15 @@ public class ConfigService
     public async Task SetAutoStartAsync(bool autoStart)
     {
         _config.AutoStart = autoStart;
+        await SaveConfigAsync();
+    }
+
+    /// <summary>
+    /// 设置首页游戏列表展示模式并保存配置
+    /// </summary>
+    public async Task SetHomeGameListViewModeAsync(HomeGameListViewMode viewMode)
+    {
+        _config.HomeGameListViewMode = viewMode;
         await SaveConfigAsync();
     }
 

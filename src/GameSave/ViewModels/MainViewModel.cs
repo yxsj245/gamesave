@@ -19,6 +19,7 @@ public partial class MainViewModel : BaseViewModel
         _localStorageService = App.LocalStorageService;
         _gameService = App.GameService;
         _scheduledBackupService = App.ScheduledBackupService;
+        _homeGameListViewMode = _configService.HomeGameListViewMode;
 
         // 监听游戏退出事件，刷新存档列表（使用具名方法，确保可取消订阅）
         _gameService.GameExited += OnGameExited;
@@ -114,6 +115,34 @@ public partial class MainViewModel : BaseViewModel
         get => _isBusy;
         set => SetProperty(ref _isBusy, value);
     }
+
+    private HomeGameListViewMode _homeGameListViewMode;
+    public HomeGameListViewMode HomeGameListViewMode
+    {
+        get => _homeGameListViewMode;
+        set
+        {
+            if (SetProperty(ref _homeGameListViewMode, value))
+            {
+                OnPropertyChanged(nameof(IsListViewMode));
+                OnPropertyChanged(nameof(IsTileViewMode));
+                OnPropertyChanged(nameof(ListViewVisibility));
+                OnPropertyChanged(nameof(TileViewVisibility));
+            }
+        }
+    }
+
+    public bool IsListViewMode => HomeGameListViewMode == HomeGameListViewMode.List;
+
+    public bool IsTileViewMode => HomeGameListViewMode == HomeGameListViewMode.Tile;
+
+    public Microsoft.UI.Xaml.Visibility ListViewVisibility => IsListViewMode
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility TileViewVisibility => IsTileViewMode
+        ? Microsoft.UI.Xaml.Visibility.Visible
+        : Microsoft.UI.Xaml.Visibility.Collapsed;
 
     private string _statusMessage = string.Empty;
     public string StatusMessage
@@ -253,6 +282,7 @@ public partial class MainViewModel : BaseViewModel
     public async Task InitializeAsync()
     {
         // 配置服务已在 App.OnLaunched 中初始化，此处无需再次调用
+        HomeGameListViewMode = _configService.HomeGameListViewMode;
         LoadGamesFromConfig();
         LoadCloudConfigs();
         await Task.CompletedTask;
@@ -377,6 +407,18 @@ public partial class MainViewModel : BaseViewModel
         IsDetailsVisible = false;
         SelectedGame = null;
         IsActionProgressVisible = false;
+    }
+
+    /// <summary>
+    /// 切换首页游戏列表展示模式，并立即持久化。
+    /// </summary>
+    public async Task SetHomeGameListViewModeAsync(HomeGameListViewMode viewMode)
+    {
+        if (HomeGameListViewMode == viewMode)
+            return;
+
+        HomeGameListViewMode = viewMode;
+        await _configService.SetHomeGameListViewModeAsync(viewMode);
     }
 
     #endregion

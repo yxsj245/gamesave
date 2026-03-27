@@ -1,6 +1,8 @@
 using GameSave.Helpers;
 using GameSave.Models;
 using GameSave.Services;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace GameSave.Views
 {
@@ -9,10 +11,15 @@ namespace GameSave.Views
     /// </summary>
     public partial class HomePage : Page
     {
+        private Storyboard? _viewModeTransitionStoryboard;
+
         public HomePage()
         {
             this.InitializeComponent();
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            ApplyViewModeImmediately(ViewModel.HomeGameListViewMode);
+            SyncViewModeSwitchSelection();
+            UpdateDragReorderState();
 
             // 监听游戏崩溃检测事件，弹窗提示用户（使用具名方法，确保可取消订阅）
             App.GameService.GameCrashDetected += OnGameCrashDetected;
@@ -33,13 +40,16 @@ namespace GameSave.Views
             {
                 System.Diagnostics.Debug.WriteLine($"[HomePage] 初始化异常: {ex}");
             }
+            SyncViewModeSwitchSelection();
             UpdateEmptyState();
+            UpdateDragReorderState();
         }
 
         /// <summary>离开页面时取消事件订阅，防止内存泄漏</summary>
         protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
         {
             base.OnNavigatedFrom(e);
+            StopViewModeTransition();
             App.GameService.GameCrashDetected -= OnGameCrashDetected;
             App.GameService.ProcessLaunchFailed -= OnProcessLaunchFailed;
             ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
@@ -144,6 +154,13 @@ namespace GameSave.Views
                     HideDetailsStoryboard.Begin();
                 }
             }
+            else if (e.PropertyName == nameof(ViewModel.HomeGameListViewMode))
+            {
+                SyncViewModeSwitchSelection();
+                HideDragIndicator();
+                ClearTileDropTargetHighlight();
+                AnimateViewModeChange(ViewModel.HomeGameListViewMode);
+            }
         }
 
         private void HideDetailsStoryboard_Completed(object sender, object e)
@@ -157,6 +174,173 @@ namespace GameSave.Views
         #endregion
 
         #region 搜索游戏
+
+        /// <summary>立即应用视图模式，不播放动画</summary>
+        private void ApplyViewModeImmediately(HomeGameListViewMode mode)
+        {
+            StopViewModeTransition();
+
+            var activeView = GetViewElement(mode);
+            var inactiveView = GetViewElement(mode == HomeGameListViewMode.List
+                ? HomeGameListViewMode.Tile
+                : HomeGameListViewMode.List);
+
+            SetViewState(activeView, true, 1, 0, true, 1);
+            SetViewState(inactiveView, false, 0, 0, false, 0);
+        }
+
+        /// <summary>执行列表和平铺之间的切换动画</summary>
+        private void AnimateViewModeChange(HomeGameListViewMode mode)
+        {
+            var incomingView = GetViewElement(mode);
+            var outgoingView = GetViewElement(mode == HomeGameListViewMode.List
+                ? HomeGameListViewMode.Tile
+                : HomeGameListViewMode.List);
+
+            if (ReferenceEquals(incomingView, outgoingView))
+            {
+                ApplyViewModeImmediately(mode);
+                return;
+            }
+
+            StopViewModeTransition();
+
+            var incomingOffset = mode == HomeGameListViewMode.Tile ? 22d : -22d;
+            var outgoingOffset = mode == HomeGameListViewMode.Tile ? -14d : 14d;
+
+            SetViewState(incomingView, true, 0, incomingOffset, false, 1);
+            SetViewState(outgoingView, true, 1, 0, false, 0);
+
+            var storyboard = new Storyboard();
+
+            storyboard.Children.Add(CreateOpacityAnimation(incomingView, 0, 1, 240, new CubicEase { EasingMode = EasingMode.EaseOut }));
+            storyboard.Children.Add(CreateTranslateAnimation(incomingView, incomingOffset, 0, 280, new ExponentialEase { EasingMode = EasingMode.EaseOut, Exponent = 5 }));
+            storyboard.Children.Add(CreateOpacityAnimation(outgoingView, 1, 0, 170, new CubicEase { EasingMode = EasingMode.EaseIn }));
+            storyboard.Children.Add(CreateTranslateAnimation(outgoingView, 0, outgoingOffset, 180, new ExponentialEase { EasingMode = EasingMode.EaseIn, Exponent = 4 }));
+
+            _viewModeTransitionStoryboard = storyboard;
+            storyboard.Completed += (_, _) =>
+            {
+                if (!ReferenceEquals(_viewModeTransitionStoryboard, storyboard))
+                    return;
+
+                SetViewState(incomingView, true, 1, 0, true, 1);
+                SetViewState(outgoingView, false, 0, 0, false, 0);
+                _viewModeTransitionStoryboard = null;
+            };
+            storyboard.Begin();
+        }
+
+        /// <summary>停止视图切换动画</summary>
+        private void StopViewModeTransition()
+        {
+            if (_viewModeTransitionStoryboard == null)
+                return;
+
+            _viewModeTransitionStoryboard.Stop();
+            _viewModeTransitionStoryboard = null;
+        }
+
+        /// <summary>获取指定模式对应的视图元素</summary>
+        private FrameworkElement GetViewElement(HomeGameListViewMode mode) =>
+            mode == HomeGameListViewMode.Tile ? GamesTileView : GamesList;
+
+        /// <summary>设置视图元素的显示状态</summary>
+        private static void SetViewState(
+            FrameworkElement element,
+            bool isVisible,
+            double opacity,
+            double translateY,
+            bool isHitTestVisible,
+            int zIndex)
+        {
+            element.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+            element.Opacity = opacity;
+            element.IsHitTestVisible = isHitTestVisible;
+            Canvas.SetZIndex(element, zIndex);
+
+            if (element.RenderTransform is not TranslateTransform transform)
+            {
+                transform = new TranslateTransform();
+                element.RenderTransform = transform;
+            }
+
+            transform.Y = translateY;
+        }
+
+        /// <summary>创建透明度动画</summary>
+        private static DoubleAnimation CreateOpacityAnimation(
+            FrameworkElement target,
+            double from,
+            double to,
+            int durationMs,
+            EasingFunctionBase easing)
+        {
+            var animation = new DoubleAnimation
+            {
+                From = from,
+                To = to,
+                Duration = TimeSpan.FromMilliseconds(durationMs),
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, "Opacity");
+            return animation;
+        }
+
+        /// <summary>创建纵向位移动画</summary>
+        private static DoubleAnimation CreateTranslateAnimation(
+            FrameworkElement target,
+            double from,
+            double to,
+            int durationMs,
+            EasingFunctionBase easing)
+        {
+            if (target.RenderTransform is not TranslateTransform transform)
+            {
+                transform = new TranslateTransform();
+                target.RenderTransform = transform;
+            }
+
+            var animation = new DoubleAnimation
+            {
+                From = from,
+                To = to,
+                Duration = TimeSpan.FromMilliseconds(durationMs),
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(animation, transform);
+            Storyboard.SetTargetProperty(animation, "Y");
+            return animation;
+        }
+
+        /// <summary>同步顶部视图切换控件与当前展示模式</summary>
+        private void SyncViewModeSwitchSelection()
+        {
+            if (ViewModeSwitch == null)
+                return;
+
+            var targetIndex = ViewModel.IsTileViewMode ? 1 : 0;
+            if (ViewModeSwitch.SelectedIndex != targetIndex)
+            {
+                ViewModeSwitch.SelectedIndex = targetIndex;
+            }
+        }
+
+        /// <summary>切换游戏列表展示模式</summary>
+        private async void ViewModeSwitch_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ViewModeSwitch.SelectedIndex < 0)
+                return;
+
+            var nextMode = ViewModeSwitch.SelectedIndex == 1
+                ? HomeGameListViewMode.Tile
+                : HomeGameListViewMode.List;
+
+            await ViewModel.SetHomeGameListViewModeAsync(nextMode);
+            HideDragIndicator();
+            ClearTileDropTargetHighlight();
+        }
 
         /// <summary>搜索框文本变化时实时过滤游戏列表</summary>
         private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
@@ -186,17 +370,38 @@ namespace GameSave.Views
         /// <summary>正在拖拽的游戏对象</summary>
         private Game? _draggedGame;
 
+        /// <summary>本次拖拽是否已经发生顺序变更</summary>
+        private bool _hasPendingOrderPersist;
+
+        /// <summary>当前高亮的平铺目标项索引</summary>
+        private int _tileDropHighlightIndex = -1;
+
+        /// <summary>当前高亮的平铺目标容器</summary>
+        private GridViewItem? _tileDropHighlightContainer;
+
         /// <summary>根据搜索状态切换拖拽排序的启用/禁用</summary>
         private void UpdateDragReorderState()
         {
             var isSearching = !string.IsNullOrEmpty(ViewModel.SearchKeyword?.Trim());
             GamesList.CanDragItems = !isSearching;
             GamesList.AllowDrop = !isSearching;
+            GamesTileView.CanDragItems = !isSearching;
+            GamesTileView.AllowDrop = !isSearching;
+
+            if (isSearching)
+            {
+                HideDragIndicator();
+                ClearTileDropTargetHighlight();
+            }
         }
 
         /// <summary>拖拽开始：记录被拖拽的游戏</summary>
-        private void GamesList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+        private void BeginGameDrag(DragItemsStartingEventArgs e)
         {
+            _hasPendingOrderPersist = false;
+            HideDragIndicator();
+            ClearTileDropTargetHighlight();
+
             if (e.Items.Count > 0 && e.Items[0] is Game game)
             {
                 _draggedGame = game;
@@ -204,10 +409,16 @@ namespace GameSave.Views
             }
         }
 
+        /// <summary>列表视图开始拖拽</summary>
+        private void GamesList_DragItemsStarting(object sender, DragItemsStartingEventArgs e) => BeginGameDrag(e);
+
+        /// <summary>平铺视图开始拖拽</summary>
+        private void GamesTileView_DragItemsStarting(object sender, DragItemsStartingEventArgs e) => BeginGameDrag(e);
+
         /// <summary>
         /// 根据鼠标位置计算目标插入索引，以及指示线应显示的 Y 坐标
         /// </summary>
-        private (int targetIndex, double indicatorY) GetDropTargetInfo(DragEventArgs e)
+        private (int targetIndex, double indicatorY) GetListDropTargetInfo(DragEventArgs e)
         {
             var filteredGames = ViewModel.FilteredGames;
             var position = e.GetPosition(GamesList);
@@ -235,10 +446,10 @@ namespace GameSave.Views
             {
                 var lastTransform = lastContainer.TransformToVisual(GamesList);
                 var lastPosition = lastTransform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                return (filteredGames.Count - 1, lastPosition.Y + lastContainer.ActualHeight);
+                return (filteredGames.Count, lastPosition.Y + lastContainer.ActualHeight);
             }
 
-            return (filteredGames.Count - 1, 0);
+            return (filteredGames.Count, 0);
         }
 
         /// <summary>显示拖拽指示线到指定 Y 坐标</summary>
@@ -256,6 +467,153 @@ namespace GameSave.Views
             DragIndicatorLine.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
         }
 
+        /// <summary>根据指针位置计算平铺视图的目标插入索引</summary>
+        private int GetTileDropTargetIndex(DragEventArgs e)
+        {
+            var filteredGames = ViewModel.FilteredGames;
+            if (filteredGames.Count == 0)
+                return 0;
+
+            var position = e.GetPosition(GamesTileView);
+            var nearestIndex = filteredGames.Count;
+            var nearestDistance = double.MaxValue;
+            Windows.Foundation.Rect? lastRect = null;
+
+            for (int i = 0; i < filteredGames.Count; i++)
+            {
+                if (GamesTileView.ContainerFromIndex(i) is not GridViewItem container)
+                    continue;
+
+                var transform = container.TransformToVisual(GamesTileView);
+                var topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                var rect = new Windows.Foundation.Rect(topLeft.X, topLeft.Y, container.ActualWidth, container.ActualHeight);
+
+                if (lastRect == null
+                    || rect.Bottom > lastRect.Value.Bottom
+                    || (Math.Abs(rect.Bottom - lastRect.Value.Bottom) < 0.5 && rect.Right > lastRect.Value.Right))
+                {
+                    lastRect = rect;
+                }
+
+                if (rect.Contains(position))
+                {
+                    var insertAfter = position.X > rect.X + rect.Width * 0.68
+                        || position.Y > rect.Y + rect.Height * 0.72;
+                    return Math.Min(i + (insertAfter ? 1 : 0), filteredGames.Count);
+                }
+
+                var centerX = rect.X + rect.Width / 2;
+                var centerY = rect.Y + rect.Height / 2;
+                var distance = Math.Pow(position.X - centerX, 2) + Math.Pow(position.Y - centerY, 2);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestIndex = i;
+                }
+            }
+
+            if (lastRect.HasValue
+                && position.Y >= lastRect.Value.Y + lastRect.Value.Height * 0.55
+                && position.X >= lastRect.Value.X)
+            {
+                return filteredGames.Count;
+            }
+
+            return nearestIndex == filteredGames.Count ? filteredGames.Count : nearestIndex;
+        }
+
+        /// <summary>高亮平铺视图中的目标卡片</summary>
+        private void HighlightTileDropTarget(int insertIndex)
+        {
+            var count = ViewModel.FilteredGames.Count;
+            if (count == 0)
+            {
+                ClearTileDropTargetHighlight();
+                return;
+            }
+
+            var visualIndex = Math.Min(insertIndex, count - 1);
+            if (_tileDropHighlightIndex == visualIndex)
+                return;
+
+            ClearTileDropTargetHighlight();
+
+            if (GamesTileView.ContainerFromIndex(visualIndex) is GridViewItem container)
+            {
+                _tileDropHighlightIndex = visualIndex;
+                _tileDropHighlightContainer = container;
+                container.BorderBrush = CreateAccentBrush();
+            }
+        }
+
+        /// <summary>清理平铺视图的目标卡片高亮</summary>
+        private void ClearTileDropTargetHighlight()
+        {
+            if (_tileDropHighlightContainer != null)
+            {
+                _tileDropHighlightContainer.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                _tileDropHighlightContainer.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            }
+
+            _tileDropHighlightContainer = null;
+            _tileDropHighlightIndex = -1;
+        }
+
+        /// <summary>创建主题强调色画刷，用于拖拽高亮</summary>
+        private static Microsoft.UI.Xaml.Media.Brush CreateAccentBrush()
+        {
+            if (Application.Current.Resources.TryGetValue("SystemAccentColor", out var accentResource)
+                && accentResource is Windows.UI.Color accentColor)
+            {
+                return new Microsoft.UI.Xaml.Media.SolidColorBrush(accentColor);
+            }
+
+            return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.DeepSkyBlue);
+        }
+
+        /// <summary>在过滤后的集合中移动拖拽项</summary>
+        private bool TryMoveDraggedGame(int newIndex)
+        {
+            if (_draggedGame == null)
+                return false;
+
+            var filteredGames = ViewModel.FilteredGames;
+            var oldIndex = filteredGames.IndexOf(_draggedGame);
+            if (oldIndex < 0)
+                return false;
+
+            newIndex = Math.Clamp(newIndex, 0, filteredGames.Count);
+            if (newIndex > oldIndex)
+            {
+                newIndex--;
+            }
+
+            if (oldIndex == newIndex)
+                return false;
+
+            filteredGames.RemoveAt(oldIndex);
+            filteredGames.Insert(newIndex, _draggedGame);
+            _hasPendingOrderPersist = true;
+            return true;
+        }
+
+        /// <summary>将过滤后的顺序同步回主列表并持久化</summary>
+        private async Task PersistFilteredGamesOrderAsync()
+        {
+            var newOrder = ViewModel.FilteredGames.ToList();
+
+            ViewModel.Games.Clear();
+            foreach (var game in newOrder)
+            {
+                ViewModel.Games.Add(game);
+            }
+
+            var orderedIds = ViewModel.Games.Select(g => g.Id).ToList();
+            await App.ConfigService.ReorderGamesAsync(orderedIds);
+
+            System.Diagnostics.Debug.WriteLine($"[拖拽排序] 已持久化新顺序，共 {orderedIds.Count} 个游戏");
+        }
+
         /// <summary>拖拽经过：设置放置效果并更新指示线位置</summary>
         private void GamesList_DragOver(object sender, DragEventArgs e)
         {
@@ -264,8 +622,9 @@ namespace GameSave.Views
             e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
 
             // 更新指示线位置
-            var (_, indicatorY) = GetDropTargetInfo(e);
+            var (_, indicatorY) = GetListDropTargetInfo(e);
             ShowDragIndicator(indicatorY);
+            ClearTileDropTargetHighlight();
         }
 
         /// <summary>放下：计算目标位置并移动游戏</summary>
@@ -275,44 +634,58 @@ namespace GameSave.Views
 
             if (_draggedGame == null) return;
 
-            var filteredGames = ViewModel.FilteredGames;
-            var oldIndex = filteredGames.IndexOf(_draggedGame);
-            if (oldIndex < 0) return;
+            var (newIndex, _) = GetListDropTargetInfo(e);
+            TryMoveDraggedGame(newIndex);
+        }
 
-            var (newIndex, _) = GetDropTargetInfo(e);
+        /// <summary>列表视图拖拽离开时隐藏指示线</summary>
+        private void GamesList_DragLeave(object sender, DragEventArgs e)
+        {
+            HideDragIndicator();
+        }
 
-            if (oldIndex == newIndex) return;
+        /// <summary>平铺视图拖拽经过时高亮目标卡片</summary>
+        private void GamesTileView_DragOver(object sender, DragEventArgs e)
+        {
+            if (_draggedGame == null) return;
 
-            // 在 FilteredGames 中移动
-            filteredGames.RemoveAt(oldIndex);
-            // 如果新位置在旧位置之后，移除旧项后索引需要调整
-            if (newIndex > oldIndex) newIndex = Math.Min(newIndex, filteredGames.Count);
-            filteredGames.Insert(newIndex, _draggedGame);
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+            HideDragIndicator();
+
+            var newIndex = GetTileDropTargetIndex(e);
+            HighlightTileDropTarget(newIndex);
+        }
+
+        /// <summary>平铺视图放下时移动到目标位置</summary>
+        private void GamesTileView_Drop(object sender, DragEventArgs e)
+        {
+            if (_draggedGame == null) return;
+
+            var newIndex = GetTileDropTargetIndex(e);
+            HighlightTileDropTarget(newIndex);
+            TryMoveDraggedGame(newIndex);
+        }
+
+        /// <summary>平铺视图拖拽离开时清理目标高亮</summary>
+        private void GamesTileView_DragLeave(object sender, DragEventArgs e)
+        {
+            ClearTileDropTargetHighlight();
         }
 
         /// <summary>拖拽完成后，将新顺序同步到 Games 并持久化</summary>
-        private async void GamesList_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        private async void GameCollection_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
             HideDragIndicator();
+            ClearTileDropTargetHighlight();
 
             if (_draggedGame == null) return;
 
             try
             {
-                // 将 FilteredGames 的新顺序同步回 Games 主列表
-                var newOrder = ViewModel.FilteredGames.ToList();
-
-                ViewModel.Games.Clear();
-                foreach (var game in newOrder)
+                if (_hasPendingOrderPersist)
                 {
-                    ViewModel.Games.Add(game);
+                    await PersistFilteredGamesOrderAsync();
                 }
-
-                // 持久化新顺序到配置文件
-                var orderedIds = ViewModel.Games.Select(g => g.Id).ToList();
-                await App.ConfigService.ReorderGamesAsync(orderedIds);
-
-                System.Diagnostics.Debug.WriteLine($"[拖拽排序] 已持久化新顺序，共 {orderedIds.Count} 个游戏");
             }
             catch (Exception ex)
             {
@@ -321,6 +694,7 @@ namespace GameSave.Views
             finally
             {
                 _draggedGame = null;
+                _hasPendingOrderPersist = false;
             }
         }
 
@@ -329,6 +703,16 @@ namespace GameSave.Views
         #region 游戏列表项交互
 
         private void GamesList_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            HandleGameItemTapped(sender, e);
+        }
+
+        private void GamesTileView_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            HandleGameItemTapped(sender, e);
+        }
+
+        private void HandleGameItemTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
             // 检查点击源是否来自按钮控件（启动/停止按钮），如果是则不打开详情页
             var source = e.OriginalSource as DependencyObject;
