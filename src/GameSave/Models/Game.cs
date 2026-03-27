@@ -170,9 +170,9 @@ public class Game : INotifyPropertyChanged
     {
         get
         {
-            if (_gameIconSource == null && HasProcessPath)
+            if (_gameIconSource == null)
             {
-                _gameIconSource = IconExtractorHelper.GetIconFromExe(ProcessPath);
+                _gameIconSource = IconExtractorHelper.GetGameIcon(Id, IconPath, ProcessPath);
             }
             return _gameIconSource;
         }
@@ -183,11 +183,12 @@ public class Game : INotifyPropertyChanged
     public bool HasGameIcon => GameIconSource != null;
 
     /// <summary>
-    /// 刷新图标缓存（ProcessPath 变更后调用）
+    /// 刷新图标缓存（启动进程或自定义图标变更后调用）
     /// </summary>
     public void RefreshIcon()
     {
         IconExtractorHelper.ClearCache(ProcessPath);
+        IconExtractorHelper.ClearCache(IconExtractorHelper.ResolveGameIconPath(Id, IconPath));
         _gameIconSource = null;
         OnPropertyChanged(nameof(GameIconSource));
         OnPropertyChanged(nameof(HasGameIcon));

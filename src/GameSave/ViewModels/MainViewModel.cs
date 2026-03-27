@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using GameSave.Helpers;
 using GameSave.Models;
 using GameSave.Services;
 
@@ -170,6 +171,14 @@ public partial class MainViewModel : BaseViewModel
     {
         get => _newGameProcessArgs;
         set => SetProperty(ref _newGameProcessArgs, value);
+    }
+
+    // 自定义图标文件路径（添加游戏时可选）
+    private string? _newGameIconPath;
+    public string? NewGameIconPath
+    {
+        get => _newGameIconPath;
+        set => SetProperty(ref _newGameIconPath, value);
     }
 
     // 第二启动进程路径
@@ -385,6 +394,7 @@ public partial class MainViewModel : BaseViewModel
         NewGameProcessArgs = string.Empty;
         NewGameSecondaryProcessPath = string.Empty;
         NewGameSecondaryProcessArgs = string.Empty;
+        NewGameIconPath = null;
         SelectedCloudConfigId = null;
         NewGameScheduledBackupEnabled = false;
         NewGameScheduledBackupInterval = 30;
@@ -425,11 +435,15 @@ public partial class MainViewModel : BaseViewModel
                 SecondaryProcessPath = string.IsNullOrWhiteSpace(NewGameSecondaryProcessPath) ? null : NewGameSecondaryProcessPath.Trim(),
                 SecondaryProcessArgs = string.IsNullOrWhiteSpace(NewGameSecondaryProcessArgs) ? null : NewGameSecondaryProcessArgs.Trim(),
                 CloudConfigId = SelectedCloudConfigId,
-                IconPath = "\uE7FC",
                 ScheduledBackupEnabled = NewGameScheduledBackupEnabled,
                 ScheduledBackupIntervalMinutes = NewGameScheduledBackupInterval,
                 ScheduledBackupMaxCount = NewGameScheduledBackupMaxCount
             };
+
+            if (!string.IsNullOrWhiteSpace(NewGameIconPath))
+            {
+                game.IconPath = await IconExtractorHelper.SaveCustomIconAsync(game.Id, NewGameIconPath);
+            }
 
             await _gameService.AddGameAsync(game);
             Games.Add(game);
@@ -485,7 +499,6 @@ public partial class MainViewModel : BaseViewModel
                         ProcessArgs = string.IsNullOrWhiteSpace(detected.ProcessArgs) ? null : detected.ProcessArgs.Trim(),
                         CloudConfigId = detected.CloudConfigId,
                         Source = detected.Source,
-                        IconPath = "\uE7FC",
                         ScheduledBackupEnabled = detected.ScheduledBackupEnabled,
                         ScheduledBackupIntervalMinutes = detected.ScheduledBackupIntervalMinutes,
                         ScheduledBackupMaxCount = detected.ScheduledBackupMaxCount

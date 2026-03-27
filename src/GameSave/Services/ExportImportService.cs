@@ -132,6 +132,18 @@ public class ExportImportService
 
                     saveCount++;
                 }
+
+                // 收集其他游戏资源文件，例如自定义图标
+                foreach (var assetFile in Directory.GetFiles(gameWorkDir, "*", SearchOption.AllDirectories)
+                             .Where(file => !file.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var relativePath = Path.GetRelativePath(gameWorkDir, assetFile).Replace('\\', '/');
+                    var assetEntry = archive.CreateEntry($"{game.Id}/{relativePath}", CompressionLevel.Optimal);
+
+                    await using var assetStream = new FileStream(assetFile, FileMode.Open, FileAccess.Read);
+                    await using var assetEntryStream = assetEntry.Open();
+                    await assetStream.CopyToAsync(assetEntryStream);
+                }
             }
 
             manifest.Games.Add(new ExportGameSummary
@@ -273,23 +285,29 @@ public class ExportImportService
 
             // 提取该游戏的存档文件
             var gameId = Path.GetDirectoryName(gameEntry.FullName)?.Replace('\\', '/').TrimEnd('/') ?? "";
-            var saveEntries = archive.Entries
+            var gameAssetEntries = archive.Entries
                 .Where(e =>
-                    e.FullName.StartsWith($"{gameId}/saves/", StringComparison.OrdinalIgnoreCase) &&
-                    e.FullName.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+                    e.FullName.StartsWith($"{gameId}/", StringComparison.OrdinalIgnoreCase) &&
+                    !e.FullName.EndsWith("/game.json", StringComparison.OrdinalIgnoreCase) &&
+                    !e.FullName.Equals("manifest.json", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             int savesExtracted = 0;
-            foreach (var saveEntry in saveEntries)
+            foreach (var gameAssetEntry in gameAssetEntries)
             {
-                var tarFileName = Path.GetFileName(saveEntry.FullName);
-                var targetPath = Path.Combine(gameWorkDir, tarFileName);
+                var relativePath = gameAssetEntry.FullName[(gameId.Length + 1)..].Replace('/', Path.DirectorySeparatorChar);
+                var targetPath = Path.Combine(gameWorkDir, relativePath);
 
-                await using var saveStream = saveEntry.Open();
+                var targetDir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrWhiteSpace(targetDir))
+                    Directory.CreateDirectory(targetDir);
+
+                await using var saveStream = gameAssetEntry.Open();
                 await using var targetStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
                 await saveStream.CopyToAsync(targetStream);
 
-                savesExtracted++;
+                if (targetPath.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+                    savesExtracted++;
             }
 
             // 重置添加时间为当前时间

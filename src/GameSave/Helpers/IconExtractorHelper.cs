@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using GameSave;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace GameSave.Helpers;
@@ -89,14 +90,190 @@ public static class IconExtractorHelper
     }
 
     /// <summary>
-    /// 清除指定 EXE 路径的图标缓存（用于路径变更后刷新）
+    /// 从普通图片文件提取图标并返回 BitmapImage。
+    /// 支持 PNG、JPG、BMP、GIF、ICO 等常见格式。
     /// </summary>
-    public static void ClearCache(string? exePath)
+    /// <param name="imagePath">图片文件的完整路径</param>
+    /// <returns>图片位图，失败返回 null</returns>
+    public static BitmapImage? GetIconFromImageFile(string? imagePath)
     {
-        if (string.IsNullOrWhiteSpace(exePath))
+        if (string.IsNullOrWhiteSpace(imagePath))
+            return null;
+
+        var resolvedPath = Path.GetFullPath(imagePath);
+        var cacheKey = GetCacheKey(resolvedPath);
+
+        if (_memoryCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var cachePath = GetCachePath(cacheKey);
+        if (File.Exists(cachePath))
+        {
+            var bitmap = LoadBitmapFromFile(cachePath);
+            if (bitmap != null)
+            {
+                _memoryCache[cacheKey] = bitmap;
+                return bitmap;
+            }
+        }
+
+        if (!File.Exists(resolvedPath))
+            return null;
+
+        try
+        {
+            var bytes = File.ReadAllBytes(resolvedPath);
+            if (bytes.Length == 0)
+                return null;
+
+            Directory.CreateDirectory(CacheDir);
+            File.WriteAllBytes(cachePath, bytes);
+
+            var bitmap = LoadBitmapFromBytes(bytes);
+            if (bitmap != null)
+            {
+                _memoryCache[cacheKey] = bitmap;
+            }
+            return bitmap;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[IconExtractor] 加载自定义图标失败: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 获取游戏最终应该显示的图标。
+    /// 优先级：自定义图标 > 启动进程图标 > 空。
+    /// </summary>
+    public static BitmapImage? GetGameIcon(string gameId, string? iconPath, string? processPath)
+    {
+        var customIconPath = ResolveGameIconPath(gameId, iconPath);
+        if (!string.IsNullOrWhiteSpace(customIconPath) && File.Exists(customIconPath))
+        {
+            var customIcon = GetIconFromImageFile(customIconPath);
+            if (customIcon != null)
+                return customIcon;
+        }
+
+        return GetIconFromExe(processPath);
+    }
+
+    /// <summary>
+    /// 解析游戏图标路径。
+    /// 如果存储的是相对路径，则按游戏工作目录进行拼接。
+    /// </summary>
+    public static string? ResolveGameIconPath(string gameId, string? iconPath)
+    {
+        if (string.IsNullOrWhiteSpace(iconPath))
+            return null;
+
+        if (Path.IsPathRooted(iconPath))
+            return iconPath;
+
+        if (string.IsNullOrWhiteSpace(gameId))
+            return null;
+
+        try
+        {
+            var workDir = App.ConfigService.WorkDirectory;
+            if (string.IsNullOrWhiteSpace(workDir))
+                return null;
+
+            return Path.Combine(workDir, gameId, iconPath);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[IconExtractor] 解析游戏图标路径失败: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 将用户选择的图片复制为游戏自定义图标，并返回保存到配置中的相对路径。
+    /// </summary>
+    /// <param name="gameId">游戏 ID</param>
+    /// <param name="sourceImagePath">用户选择的图片路径</param>
+    /// <param name="oldIconPath">旧图标路径，用于清理旧文件</param>
+    /// <returns>保存到配置中的相对路径</returns>
+    public static async Task<string?> SaveCustomIconAsync(string gameId, string? sourceImagePath, string? oldIconPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(sourceImagePath))
+            return null;
+
+        var resolvedSourcePath = Path.GetFullPath(sourceImagePath);
+        if (!File.Exists(resolvedSourcePath))
+            throw new FileNotFoundException("自定义图标文件不存在", resolvedSourcePath);
+
+        var extension = Path.GetExtension(sourceImagePath);
+        if (string.IsNullOrWhiteSpace(extension))
+            extension = ".png";
+
+        var iconDir = Path.Combine(App.ConfigService.GetGameWorkDirectory(gameId), "icon");
+        Directory.CreateDirectory(iconDir);
+
+        var targetFileName = $"custom-icon{extension.ToLowerInvariant()}";
+        var targetPath = Path.Combine(iconDir, targetFileName);
+        var storedRelativePath = Path.Combine("icon", targetFileName);
+
+        if (string.Equals(resolvedSourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
+            return storedRelativePath;
+
+        // 清理旧缓存，避免更换图标后仍然显示旧图片
+        var oldResolvedPath = ResolveGameIconPath(gameId, oldIconPath);
+        ClearCache(oldResolvedPath);
+        ClearCache(targetPath);
+
+        await Task.Run(() => File.Copy(resolvedSourcePath, targetPath, overwrite: true));
+
+        if (!string.IsNullOrWhiteSpace(oldResolvedPath) &&
+            !string.Equals(oldResolvedPath, targetPath, StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(oldResolvedPath))
+        {
+            try
+            {
+                File.Delete(oldResolvedPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[IconExtractor] 删除旧自定义图标失败: {ex.Message}");
+            }
+        }
+
+        return storedRelativePath;
+    }
+
+    /// <summary>
+    /// 删除游戏自定义图标文件。
+    /// </summary>
+    public static void RemoveCustomIcon(string gameId, string? iconPath)
+    {
+        var resolvedPath = ResolveGameIconPath(gameId, iconPath);
+        ClearCache(resolvedPath);
+
+        if (!string.IsNullOrWhiteSpace(resolvedPath) && File.Exists(resolvedPath))
+        {
+            try
+            {
+                File.Delete(resolvedPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[IconExtractor] 删除自定义图标失败: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 清除指定路径的图标缓存（用于路径变更后刷新）
+    /// </summary>
+    public static void ClearCache(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
             return;
 
-        var resolvedPath = PathEnvironmentHelper.ExpandEnvVariables(exePath);
+        var resolvedPath = PathEnvironmentHelper.ExpandEnvVariables(path);
         var cacheKey = GetCacheKey(resolvedPath);
 
         _memoryCache.Remove(cacheKey);

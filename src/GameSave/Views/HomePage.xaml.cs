@@ -412,6 +412,28 @@ namespace GameSave.Views
 
         #endregion
 
+        /// <summary>
+        /// 选择自定义图标文件
+        /// </summary>
+        private static async Task<string?> PickCustomIconAsync()
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            picker.FileTypeFilter.Add(".png");
+            picker.FileTypeFilter.Add(".jpg");
+            picker.FileTypeFilter.Add(".jpeg");
+            picker.FileTypeFilter.Add(".bmp");
+            picker.FileTypeFilter.Add(".gif");
+            picker.FileTypeFilter.Add(".ico");
+            picker.FileTypeFilter.Add("*");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            var file = await picker.PickSingleFileAsync();
+            return file?.Path;
+        }
+
         #region 添加游戏
 
         private async void AddGame_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -451,6 +473,135 @@ namespace GameSave.Views
                 PlaceholderText = "例如: ELDEN RING"
             };
             panel.Children.Add(nameBox);
+
+            // 自定义图标
+            var iconPathText = new TextBlock
+            {
+                Text = "未选择自定义图标，默认优先使用启动程序图标",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            };
+
+            var iconPreviewImage = new Image
+            {
+                Width = 48,
+                Height = 48,
+                Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+
+            var iconDefaultBorder = new Border
+            {
+                Width = 48,
+                Height = 48,
+                CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Windows.UI.Color.FromArgb(255, 240, 240, 240)),
+                Child = new FontIcon
+                {
+                    Glyph = "\uE7FC",
+                    FontSize = 24,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                }
+            };
+
+            var selectedIconPath = string.Empty;
+            void UpdateIconPreview(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    iconPreviewImage.Source = null;
+                    iconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    iconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    iconPathText.Text = "未选择自定义图标，默认优先使用启动程序图标";
+                    ViewModel.NewGameIconPath = null;
+                    return;
+                }
+
+                var bitmap = IconExtractorHelper.GetIconFromImageFile(path);
+                if (bitmap != null)
+                {
+                    iconPreviewImage.Source = bitmap;
+                    iconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    iconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                }
+                else
+                {
+                    iconPreviewImage.Source = null;
+                    iconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    iconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                }
+
+                iconPathText.Text = $"已选择: {System.IO.Path.GetFileName(path)}";
+                ViewModel.NewGameIconPath = path;
+            }
+
+            var iconPanel = new StackPanel { Spacing = 8, Margin = new Microsoft.UI.Xaml.Thickness(0, 4, 0, 0) };
+            iconPanel.Children.Add(new TextBlock
+            {
+                Text = "自定义图标（可选）",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16
+            });
+
+            var iconRow = new Grid();
+            iconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            iconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            iconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var iconStack = new Grid { Width = 48, Height = 48 };
+            iconStack.Children.Add(iconDefaultBorder);
+            iconStack.Children.Add(iconPreviewImage);
+            Grid.SetColumn(iconStack, 0);
+
+            var iconInfoPanel = new StackPanel { Spacing = 4, Margin = new Microsoft.UI.Xaml.Thickness(12, 0, 0, 0) };
+            iconInfoPanel.Children.Add(new TextBlock
+            {
+                Text = "选择一张图片作为游戏列表显示图标，若不选择则继续使用启动程序图标。",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+            iconInfoPanel.Children.Add(iconPathText);
+            Grid.SetColumn(iconInfoPanel, 1);
+
+            var iconButtonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Right
+            };
+
+            var chooseIconBtn = new Button { Content = "选择图标" };
+            chooseIconBtn.Click += async (_, __) =>
+            {
+                var path = await PickCustomIconAsync();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    selectedIconPath = path;
+                    UpdateIconPreview(path);
+                }
+            };
+
+            var clearIconBtn = new Button { Content = "清除图标" };
+            clearIconBtn.Click += (_, __) =>
+            {
+                selectedIconPath = string.Empty;
+                UpdateIconPreview(null);
+            };
+
+            iconButtonPanel.Children.Add(chooseIconBtn);
+            iconButtonPanel.Children.Add(clearIconBtn);
+            Grid.SetColumn(iconButtonPanel, 2);
+
+            iconRow.Children.Add(iconStack);
+            iconRow.Children.Add(iconInfoPanel);
+            iconRow.Children.Add(iconButtonPanel);
+            iconPanel.Children.Add(iconRow);
+            panel.Children.Add(iconPanel);
 
             // ========== 多存档目录区域 ==========
             var savePathsContainer = new StackPanel { Spacing = 8 };
@@ -623,6 +774,8 @@ namespace GameSave.Views
 
             // 默认添加一行
             AddSavePathRow();
+
+            UpdateIconPreview(null);
 
             // 加号按钮点击事件
             addPathBtn.Click += (s, args) => AddSavePathRow();
@@ -898,6 +1051,7 @@ namespace GameSave.Views
                 ViewModel.NewGameProcessArgs = argsBox.Text;
                 ViewModel.NewGameSecondaryProcessPath = secondaryProcessPathBox.Text;
                 ViewModel.NewGameSecondaryProcessArgs = secondaryArgsBox.Text;
+                ViewModel.NewGameIconPath = selectedIconPath;
 
                 // 设置选中的云端配置 ID
                 if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
@@ -2019,6 +2173,151 @@ namespace GameSave.Views
             };
             panel.Children.Add(nameBox);
 
+            // 自定义图标
+            var currentIconPath = IconExtractorHelper.ResolveGameIconPath(game.Id, game.IconPath);
+            string? selectedIconSourcePath = null;
+            var iconWasCleared = false;
+
+            var editIconPathText = new TextBlock
+            {
+                Text = !string.IsNullOrWhiteSpace(currentIconPath)
+                    ? $"当前图标: {System.IO.Path.GetFileName(currentIconPath)}"
+                    : "未选择自定义图标，默认优先使用启动程序图标",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            };
+
+            var editIconPreviewImage = new Image
+            {
+                Width = 48,
+                Height = 48,
+                Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+
+            var editIconDefaultBorder = new Border
+            {
+                Width = 48,
+                Height = 48,
+                CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4),
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Windows.UI.Color.FromArgb(255, 240, 240, 240)),
+                Child = new FontIcon
+                {
+                    Glyph = "\uE7FC",
+                    FontSize = 24,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+                    VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+                }
+            };
+
+            void UpdateEditIconPreview(string? path, bool fromCurrentIcon = false)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    editIconPreviewImage.Source = null;
+                    editIconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    editIconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    editIconPathText.Text = "未选择自定义图标，默认优先使用启动程序图标";
+                    return;
+                }
+
+                var bitmap = IconExtractorHelper.GetIconFromImageFile(path);
+                if (bitmap != null)
+                {
+                    editIconPreviewImage.Source = bitmap;
+                    editIconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    editIconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                }
+                else
+                {
+                    editIconPreviewImage.Source = null;
+                    editIconPreviewImage.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    editIconDefaultBorder.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                }
+
+                editIconPathText.Text = fromCurrentIcon
+                    ? $"当前图标: {System.IO.Path.GetFileName(path)}"
+                    : $"已选择: {System.IO.Path.GetFileName(path)}";
+            }
+
+            var editIconPanel = new StackPanel { Spacing = 8, Margin = new Microsoft.UI.Xaml.Thickness(0, 4, 0, 0) };
+            editIconPanel.Children.Add(new TextBlock
+            {
+                Text = "自定义图标（可选）",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 16
+            });
+
+            var editIconRow = new Grid();
+            editIconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            editIconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            editIconRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var editIconStack = new Grid { Width = 48, Height = 48 };
+            editIconStack.Children.Add(editIconDefaultBorder);
+            editIconStack.Children.Add(editIconPreviewImage);
+            Grid.SetColumn(editIconStack, 0);
+
+            var editIconInfoPanel = new StackPanel { Spacing = 4, Margin = new Microsoft.UI.Xaml.Thickness(12, 0, 0, 0) };
+            editIconInfoPanel.Children.Add(new TextBlock
+            {
+                Text = "自定义图标会覆盖自动提取的启动程序图标。清除后会恢复为自动图标。",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+            editIconInfoPanel.Children.Add(editIconPathText);
+            Grid.SetColumn(editIconInfoPanel, 1);
+
+            var editIconButtonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Right
+            };
+
+            var editChooseIconBtn = new Button { Content = "选择图标" };
+            editChooseIconBtn.Click += async (_, __) =>
+            {
+                var path = await PickCustomIconAsync();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    selectedIconSourcePath = path;
+                    iconWasCleared = false;
+                    UpdateEditIconPreview(path);
+                }
+            };
+
+            var editClearIconBtn = new Button { Content = "清除图标" };
+            editClearIconBtn.Click += (_, __) =>
+            {
+                selectedIconSourcePath = null;
+                iconWasCleared = true;
+                UpdateEditIconPreview(null);
+            };
+
+            editIconButtonPanel.Children.Add(editChooseIconBtn);
+            editIconButtonPanel.Children.Add(editClearIconBtn);
+            Grid.SetColumn(editIconButtonPanel, 2);
+
+            editIconRow.Children.Add(editIconStack);
+            editIconRow.Children.Add(editIconInfoPanel);
+            editIconRow.Children.Add(editIconButtonPanel);
+            editIconPanel.Children.Add(editIconRow);
+            panel.Children.Add(editIconPanel);
+
+            if (!string.IsNullOrWhiteSpace(currentIconPath))
+            {
+                UpdateEditIconPreview(currentIconPath, fromCurrentIcon: true);
+            }
+            else
+            {
+                UpdateEditIconPreview(null);
+            }
+
             // ========== 多存档目录区域（可编辑） ==========
             var editSavePathsContainer = new StackPanel { Spacing = 8 };
             var editSavePathRows = new List<(Grid row, TextBox textBox)>();
@@ -2522,6 +2821,16 @@ namespace GameSave.Views
                 game.SecondaryProcessPath = string.IsNullOrWhiteSpace(editSecondaryProcessPathBox.Text) ? null : editSecondaryProcessPathBox.Text.Trim();
                 game.SecondaryProcessArgs = string.IsNullOrWhiteSpace(editSecondaryArgsBox.Text) ? null : editSecondaryArgsBox.Text.Trim();
 
+                if (iconWasCleared)
+                {
+                    IconExtractorHelper.RemoveCustomIcon(game.Id, game.IconPath);
+                    game.IconPath = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(selectedIconSourcePath))
+                {
+                    game.IconPath = await IconExtractorHelper.SaveCustomIconAsync(game.Id, selectedIconSourcePath, game.IconPath);
+                }
+
                 if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
                 {
                     game.CloudConfigId = selectedConfig.Id;
@@ -2539,7 +2848,7 @@ namespace GameSave.Views
                 var (success, message) = await ViewModel.UpdateGameAsync(game);
                 if (success)
                 {
-                    // 刷新图标缓存（ProcessPath 可能已变更）
+                    // 刷新图标缓存（ProcessPath 或自定义图标可能已变更）
                     game.RefreshIcon();
                 }
                 else
