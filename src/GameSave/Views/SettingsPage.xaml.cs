@@ -98,17 +98,9 @@ namespace GameSave.Views
             // 双重保险：如果工作目录被启动参数锁定，不允许更改
             if (ViewModel.IsWorkDirLocked) return;
 
-            var picker = new Windows.Storage.Pickers.FolderPicker();
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-            picker.FileTypeFilter.Add("*");
+            var newPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
+            if (string.IsNullOrWhiteSpace(newPath)) return;
 
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-            var folder = await picker.PickSingleFolderAsync();
-            if (folder == null) return;
-
-            var newPath = folder.Path;
             var oldPath = ViewModel.WorkDirectory;
 
             // 如果选择的目录与当前工作目录相同，则无需操作
@@ -572,18 +564,11 @@ namespace GameSave.Views
         private async void ImportGames_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
             // 打开文件选择器
-            var openPicker = new Windows.Storage.Pickers.FileOpenPicker();
-            openPicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-            openPicker.FileTypeFilter.Add(".zip");
-
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(openPicker, hwnd);
-
-            var file = await openPicker.PickSingleFileAsync();
-            if (file == null) return;
+            var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".zip"]);
+            if (string.IsNullOrWhiteSpace(filePath)) return;
 
             // 获取预览信息
-            var (previewSuccess, previews, previewMessage) = await ViewModel.GetImportPreviewAsync(file.Path);
+            var (previewSuccess, previews, previewMessage) = await ViewModel.GetImportPreviewAsync(filePath);
             if (!previewSuccess || previews == null)
             {
                 var errorDialog = new ContentDialog
@@ -674,7 +659,7 @@ namespace GameSave.Views
 
             // 执行导入（记录开始时间，确保进度条至少显示 500ms）
             var importStartTime = DateTime.Now;
-            var (importSuccess, importMessage) = await ViewModel.ImportGamesAsync(file.Path, importProgress);
+            var (importSuccess, importMessage) = await ViewModel.ImportGamesAsync(filePath, importProgress);
 
             var importElapsed = (DateTime.Now - importStartTime).TotalMilliseconds;
             if (importElapsed < 500)

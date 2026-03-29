@@ -801,21 +801,9 @@ namespace GameSave.Views
         /// </summary>
         private static async Task<string?> PickCustomIconAsync()
         {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-            picker.FileTypeFilter.Add(".png");
-            picker.FileTypeFilter.Add(".jpg");
-            picker.FileTypeFilter.Add(".jpeg");
-            picker.FileTypeFilter.Add(".bmp");
-            picker.FileTypeFilter.Add(".gif");
-            picker.FileTypeFilter.Add(".ico");
-            picker.FileTypeFilter.Add("*");
-
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-            var file = await picker.PickSingleFileAsync();
-            return file?.Path;
+            return await ShellDialogHelper.PickFileAsync(
+                App.MainWindow,
+                [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".ico", "*"]);
         }
 
         #region 添加游戏
@@ -1050,17 +1038,9 @@ namespace GameSave.Views
                 };
                 browseBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FolderPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var folder = await picker.PickSingleFolderAsync();
-                    if (folder != null)
+                    var folderPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
+                    if (!string.IsNullOrWhiteSpace(folderPath))
                     {
-                        var folderPath = folder.Path;
                         // 校验：选择的文件夹不能包含已选择的文件
                         var conflict = ValidateFolderAgainstFiles(folderPath, savePathRows, pathBox);
                         if (conflict != null)
@@ -1082,17 +1062,9 @@ namespace GameSave.Views
                 };
                 browseFileBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var file = await picker.PickSingleFileAsync();
-                    if (file != null)
+                    var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, ["*"]);
+                    if (!string.IsNullOrWhiteSpace(filePath))
                     {
-                        var filePath = file.Path;
                         // 校验：选择的文件不能在已选择的文件夹内
                         var conflict = ValidateFileAgainstFolders(filePath, savePathRows, pathBox);
                         if (conflict != null)
@@ -1209,22 +1181,13 @@ namespace GameSave.Views
             };
             browseProcessBtn.Click += async (s, args) =>
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                picker.FileTypeFilter.Add(".exe");
-                picker.FileTypeFilter.Add(".lnk");
-                picker.FileTypeFilter.Add("*");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                var file = await picker.PickSingleFileAsync();
-                if (file != null)
+                var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".exe", ".lnk", "*"]);
+                if (!string.IsNullOrWhiteSpace(filePath))
                 {
                     // 如果选择了快捷方式，自动解析目标路径和参数
-                    if (ShortcutHelper.IsShortcut(file.Path))
+                    if (ShortcutHelper.IsShortcut(filePath))
                     {
-                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(filePath);
                         if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
                         {
                             processPathBox.Text = shortcutInfo.TargetPath;
@@ -1240,7 +1203,7 @@ namespace GameSave.Views
                     }
                     else
                     {
-                        processPathBox.Text = file.Path;
+                        processPathBox.Text = filePath;
                     }
                 }
             };
@@ -1278,21 +1241,12 @@ namespace GameSave.Views
             };
             browseSecondaryProcessBtn.Click += async (s, args) =>
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                picker.FileTypeFilter.Add(".exe");
-                picker.FileTypeFilter.Add(".lnk");
-                picker.FileTypeFilter.Add("*");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                var file = await picker.PickSingleFileAsync();
-                if (file != null)
+                var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".exe", ".lnk", "*"]);
+                if (!string.IsNullOrWhiteSpace(filePath))
                 {
-                    if (ShortcutHelper.IsShortcut(file.Path))
+                    if (ShortcutHelper.IsShortcut(filePath))
                     {
-                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(filePath);
                         if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
                         {
                             secondaryProcessPathBox.Text = shortcutInfo.TargetPath;
@@ -1308,7 +1262,7 @@ namespace GameSave.Views
                     }
                     else
                     {
-                        secondaryProcessPathBox.Text = file.Path;
+                        secondaryProcessPathBox.Text = filePath;
                     }
                 }
             };
@@ -1659,19 +1613,11 @@ namespace GameSave.Views
                     };
                     browseExeBtn.Click += async (s, args) =>
                     {
-                        var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                        picker.FileTypeFilter.Add(".exe");
-                        picker.FileTypeFilter.Add("*");
-
-                        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                        var file = await picker.PickSingleFileAsync();
-                        if (file != null)
+                        var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".exe", "*"]);
+                        if (!string.IsNullOrWhiteSpace(filePath))
                         {
-                            exeInfo.Text = file.Path;
-                            detected.ExePath = file.Path;
+                            exeInfo.Text = filePath;
+                            detected.ExePath = filePath;
                         }
                     };
                     Grid.SetColumn(browseExeBtn, 1);
@@ -1707,17 +1653,10 @@ namespace GameSave.Views
                 };
                 browseSaveBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FolderPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var folder = await picker.PickSingleFolderAsync();
-                    if (folder != null)
+                    var folderPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
+                    if (!string.IsNullOrWhiteSpace(folderPath))
                     {
-                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folder.Path);
+                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(folderPath);
                         detected.SaveFolderPath = savePathBox.Text;
                     }
                 };
@@ -1732,17 +1671,10 @@ namespace GameSave.Views
                 };
                 browseSaveFileBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var file = await picker.PickSingleFileAsync();
-                    if (file != null)
+                    var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, ["*"]);
+                    if (!string.IsNullOrWhiteSpace(filePath))
                     {
-                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(file.Path);
+                        savePathBox.Text = Helpers.PathEnvironmentHelper.ReplaceWithEnvVariables(filePath);
                         detected.SaveFolderPath = savePathBox.Text;
                     }
                 };
@@ -1921,11 +1853,7 @@ namespace GameSave.Views
                 var backupDir = App.ConfigService.GetGameWorkDirectory(ViewModel.SelectedGame.Id);
                 if (Directory.Exists(backupDir))
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = backupDir,
-                        UseShellExecute = true
-                    });
+                    ShellDialogHelper.OpenPathInExplorer(backupDir);
                 }
                 else
                 {
@@ -2775,17 +2703,9 @@ namespace GameSave.Views
                 };
                 browseBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FolderPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var folder = await picker.PickSingleFolderAsync();
-                    if (folder != null)
+                    var folderPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
+                    if (!string.IsNullOrWhiteSpace(folderPath))
                     {
-                        var folderPath = folder.Path;
                         // 校验：选择的文件夹不能包含已选择的文件
                         var conflict = ValidateFolderAgainstFiles(folderPath, editSavePathRows, pathBox);
                         if (conflict != null)
@@ -2807,17 +2727,9 @@ namespace GameSave.Views
                 };
                 browseFileBtn.Click += async (s, args) =>
                 {
-                    var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                    picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                    picker.FileTypeFilter.Add("*");
-
-                    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                    var file = await picker.PickSingleFileAsync();
-                    if (file != null)
+                    var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, ["*"]);
+                    if (!string.IsNullOrWhiteSpace(filePath))
                     {
-                        var filePath = file.Path;
                         // 校验：选择的文件不能在已选择的文件夹内
                         var conflict = ValidateFileAgainstFolders(filePath, editSavePathRows, pathBox);
                         if (conflict != null)
@@ -2937,21 +2849,12 @@ namespace GameSave.Views
             };
             browseProcessBtn.Click += async (s, args) =>
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                picker.FileTypeFilter.Add(".exe");
-                picker.FileTypeFilter.Add(".lnk");
-                picker.FileTypeFilter.Add("*");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                var file = await picker.PickSingleFileAsync();
-                if (file != null)
+                var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".exe", ".lnk", "*"]);
+                if (!string.IsNullOrWhiteSpace(filePath))
                 {
-                    if (ShortcutHelper.IsShortcut(file.Path))
+                    if (ShortcutHelper.IsShortcut(filePath))
                     {
-                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(filePath);
                         if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
                         {
                             processPathBox.Text = shortcutInfo.TargetPath;
@@ -2967,7 +2870,7 @@ namespace GameSave.Views
                     }
                     else
                     {
-                        processPathBox.Text = file.Path;
+                        processPathBox.Text = filePath;
                     }
                 }
             };
@@ -3007,21 +2910,12 @@ namespace GameSave.Views
             };
             browseEditSecondaryProcessBtn.Click += async (s, args) =>
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-                picker.FileTypeFilter.Add(".exe");
-                picker.FileTypeFilter.Add(".lnk");
-                picker.FileTypeFilter.Add("*");
-
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                var file = await picker.PickSingleFileAsync();
-                if (file != null)
+                var filePath = await ShellDialogHelper.PickFileAsync(App.MainWindow, [".exe", ".lnk", "*"]);
+                if (!string.IsNullOrWhiteSpace(filePath))
                 {
-                    if (ShortcutHelper.IsShortcut(file.Path))
+                    if (ShortcutHelper.IsShortcut(filePath))
                     {
-                        var shortcutInfo = ShortcutHelper.ResolveShortcut(file.Path);
+                        var shortcutInfo = ShortcutHelper.ResolveShortcut(filePath);
                         if (shortcutInfo != null && !string.IsNullOrWhiteSpace(shortcutInfo.TargetPath))
                         {
                             editSecondaryProcessPathBox.Text = shortcutInfo.TargetPath;
@@ -3037,7 +2931,7 @@ namespace GameSave.Views
                     }
                     else
                     {
-                        editSecondaryProcessPathBox.Text = file.Path;
+                        editSecondaryProcessPathBox.Text = filePath;
                     }
                 }
             };
