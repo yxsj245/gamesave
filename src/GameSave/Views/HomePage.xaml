@@ -628,7 +628,7 @@
         </Canvas>
 
         <!-- 游戏详情浮层 (Overlay) -->
-        <Grid x:Name="DetailsOverlay" Grid.Row="0" Grid.RowSpan="2" 
+        <Grid x:Name="DetailsOverlay" Grid.Row="0" Grid.RowSpan="2"
               Background="#80000000" 
               Visibility="Collapsed"
               Opacity="0">

@@ -185,7 +185,7 @@ namespace GameSave.Views
                 ? HomeGameListViewMode.Tile
                 : HomeGameListViewMode.List);
 
-            SetViewState(activeView, true, 1, 0, true, 1);
+            SetViewState(activeView, true, 1, 0, true, 0);
             SetViewState(inactiveView, false, 0, 0, false, 0);
         }
 
@@ -224,7 +224,7 @@ namespace GameSave.Views
                 if (!ReferenceEquals(_viewModeTransitionStoryboard, storyboard))
                     return;
 
-                SetViewState(incomingView, true, 1, 0, true, 1);
+                SetViewState(incomingView, true, 1, 0, true, 0);
                 SetViewState(outgoingView, false, 0, 0, false, 0);
                 _viewModeTransitionStoryboard = null;
             };
