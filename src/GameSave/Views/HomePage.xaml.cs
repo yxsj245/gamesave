@@ -1508,6 +1508,23 @@ namespace GameSave.Views
 
             var mainPanel = new StackPanel { Spacing = 8, MinWidth = 500 };
 
+            // 搜索框和结果统计
+            var searchBox = new AutoSuggestBox
+            {
+                PlaceholderText = "搜索游戏名称、来源平台或安装路径",
+                QueryIcon = new SymbolIcon(Symbol.Find),
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            };
+            mainPanel.Children.Add(searchBox);
+
+            var resultCountText = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
+            };
+            mainPanel.Children.Add(resultCountText);
+
             // 全选/取消全选
             var selectAllCheckBox = new CheckBox
             {
@@ -1520,6 +1537,68 @@ namespace GameSave.Views
             // 为每个游戏构建一个 Expander
             var gameExpanders = new List<(Expander expander, DetectedGame game, TextBox savePathBox, TextBox processArgsBox, ComboBox? cloudCombo, ToggleSwitch scheduledToggle, NumberBox intervalBox, NumberBox maxCountBox)>();
 
+            bool IsMatch(DetectedGame game, string keyword)
+            {
+                if (string.IsNullOrWhiteSpace(keyword))
+                    return true;
+
+                var normalizedKeyword = keyword.Trim();
+                return game.Name.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase)
+                    || game.Source.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase)
+                    || game.InstallPath.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(game.ExePath) && game.ExePath.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase));
+            }
+
+            void UpdateSelectAllState()
+            {
+                var visibleItems = gameExpanders
+                    .Where(item => item.expander.Visibility == Microsoft.UI.Xaml.Visibility.Visible)
+                    .ToList();
+
+                if (visibleItems.Count == 0)
+                {
+                    selectAllCheckBox.IsThreeState = false;
+                    selectAllCheckBox.IsChecked = false;
+                    selectAllCheckBox.IsEnabled = false;
+                    return;
+                }
+
+                selectAllCheckBox.IsEnabled = true;
+                var selectedVisibleCount = visibleItems.Count(item => item.game.IsSelected);
+                selectAllCheckBox.IsThreeState = true;
+                selectAllCheckBox.IsChecked = selectedVisibleCount switch
+                {
+                    0 => false,
+                    var count when count == visibleItems.Count => true,
+                    _ => null
+                };
+            }
+
+            void ApplyImportGameFilter()
+            {
+                var keyword = searchBox.Text ?? string.Empty;
+                var visibleCount = 0;
+
+                foreach (var item in gameExpanders)
+                {
+                    var isVisible = IsMatch(item.game, keyword);
+                    item.expander.Visibility = isVisible
+                        ? Microsoft.UI.Xaml.Visibility.Visible
+                        : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+                    if (isVisible)
+                    {
+                        visibleCount++;
+                    }
+                }
+
+                resultCountText.Text = string.IsNullOrWhiteSpace(keyword)
+                    ? $"共 {detectedGames.Count} 个可导入游戏"
+                    : $"搜索到 {visibleCount} / {detectedGames.Count} 个游戏";
+
+                UpdateSelectAllState();
+            }
+
             foreach (var detected in detectedGames)
             {
                 // ---- Expander Header：CheckBox + 游戏名 + 来源徽章 ----
@@ -1527,8 +1606,16 @@ namespace GameSave.Views
 
                 var gameCheckBox = new CheckBox { IsChecked = true, MinWidth = 0, Padding = new Microsoft.UI.Xaml.Thickness(0) };
                 // 双向绑定到 detected.IsSelected
-                gameCheckBox.Checked += (s, args) => detected.IsSelected = true;
-                gameCheckBox.Unchecked += (s, args) => detected.IsSelected = false;
+                gameCheckBox.Checked += (s, args) =>
+                {
+                    detected.IsSelected = true;
+                    UpdateSelectAllState();
+                };
+                gameCheckBox.Unchecked += (s, args) =>
+                {
+                    detected.IsSelected = false;
+                    UpdateSelectAllState();
+                };
                 headerPanel.Children.Add(gameCheckBox);
 
                 // header 中的游戏名称文本（需要在编辑时同步更新）
@@ -1770,35 +1857,51 @@ namespace GameSave.Views
             // 全选/取消全选逻辑
             selectAllCheckBox.Checked += (s, args) =>
             {
-                foreach (var (_, game, _, _, _, _, _, _) in gameExpanders)
+                foreach (var (expander, game, _, _, _, _, _, _) in gameExpanders.Where(item => item.expander.Visibility == Microsoft.UI.Xaml.Visibility.Visible))
                 {
                     game.IsSelected = true;
-                }
-                // 更新所有 CheckBox
-                foreach (var expanderItem in gameExpanders)
-                {
-                    if (expanderItem.expander.Header is StackPanel hp)
+
+                    if (expander.Header is StackPanel hp)
                     {
                         var cb = hp.Children.OfType<CheckBox>().FirstOrDefault();
-                        if (cb != null) cb.IsChecked = true;
+                        if (cb != null)
+                        {
+                            cb.IsChecked = true;
+                        }
                     }
                 }
+
+                UpdateSelectAllState();
             };
             selectAllCheckBox.Unchecked += (s, args) =>
             {
-                foreach (var (_, game, _, _, _, _, _, _) in gameExpanders)
+                foreach (var (expander, game, _, _, _, _, _, _) in gameExpanders.Where(item => item.expander.Visibility == Microsoft.UI.Xaml.Visibility.Visible))
                 {
                     game.IsSelected = false;
-                }
-                foreach (var expanderItem in gameExpanders)
-                {
-                    if (expanderItem.expander.Header is StackPanel hp)
+
+                    if (expander.Header is StackPanel hp)
                     {
                         var cb = hp.Children.OfType<CheckBox>().FirstOrDefault();
-                        if (cb != null) cb.IsChecked = false;
+                        if (cb != null)
+                        {
+                            cb.IsChecked = false;
+                        }
                     }
                 }
+
+                UpdateSelectAllState();
             };
+
+            searchBox.TextChanged += (s, args) =>
+            {
+                if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+                {
+                    ApplyImportGameFilter();
+                }
+            };
+            searchBox.QuerySubmitted += (s, args) => ApplyImportGameFilter();
+
+            ApplyImportGameFilter();
 
             scrollViewer.Content = mainPanel;
             importDialog.Content = scrollViewer;
