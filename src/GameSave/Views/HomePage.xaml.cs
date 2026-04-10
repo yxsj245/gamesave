@@ -13,6 +13,22 @@ namespace GameSave.Views
     {
         private Storyboard? _viewModeTransitionStoryboard;
 
+        /// <summary>
+        /// 编辑游戏时用于承载云端服务商下拉选项，支持空关联项。
+        /// </summary>
+        private sealed class CloudConfigOption
+        {
+            public CloudConfigOption(string displayName, CloudConfig? config)
+            {
+                DisplayName = displayName;
+                Config = config;
+            }
+
+            public string DisplayName { get; }
+
+            public CloudConfig? Config { get; }
+        }
+
         public HomePage()
         {
             this.InitializeComponent();
@@ -3048,32 +3064,40 @@ namespace GameSave.Views
 
             // 云端服务商（可选）
             ComboBox? cloudConfigComboBox = null;
-            if (ViewModel.CloudConfigs.Count > 0)
+            var cloudConfigOptions = new List<CloudConfigOption>
             {
-                cloudConfigComboBox = new ComboBox
-                {
-                    Header = "云端服务商（可选）",
-                    PlaceholderText = "不使用云端同步",
-                    HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
-                    DisplayMemberPath = "DisplayName"
-                };
-                cloudConfigComboBox.ItemsSource = ViewModel.CloudConfigs;
+                new("未关联云端服务商", null)
+            };
 
-                // 预选当前游戏关联的云端配置
-                if (!string.IsNullOrEmpty(game.CloudConfigId))
+            foreach (var config in ViewModel.CloudConfigs)
+            {
+                cloudConfigOptions.Add(new CloudConfigOption(config.DisplayName, config));
+            }
+
+            cloudConfigComboBox = new ComboBox
+            {
+                Header = "云端服务商（可选）",
+                PlaceholderText = "不使用云端同步",
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+                DisplayMemberPath = "DisplayName"
+            };
+            cloudConfigComboBox.ItemsSource = cloudConfigOptions;
+            cloudConfigComboBox.SelectedIndex = 0;
+
+            // 预选当前游戏关联的云端配置，找不到时默认回退到“未关联”
+            if (!string.IsNullOrEmpty(game.CloudConfigId))
+            {
+                foreach (var option in cloudConfigOptions)
                 {
-                    foreach (var config in ViewModel.CloudConfigs)
+                    if (option.Config?.Id == game.CloudConfigId)
                     {
-                        if (config.Id == game.CloudConfigId)
-                        {
-                            cloudConfigComboBox.SelectedItem = config;
-                            break;
-                        }
+                        cloudConfigComboBox.SelectedItem = option;
+                        break;
                     }
                 }
-
-                panel.Children.Add(cloudConfigComboBox);
             }
+
+            panel.Children.Add(cloudConfigComboBox);
 
             // ========== 定时备份组 ==========
             panel.Children.Add(new Border
@@ -3212,9 +3236,9 @@ namespace GameSave.Views
                     game.IconPath = await IconExtractorHelper.SaveCustomIconAsync(game.Id, selectedIconSourcePath, game.IconPath);
                 }
 
-                if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)
+                if (cloudConfigComboBox?.SelectedItem is CloudConfigOption selectedOption)
                 {
-                    game.CloudConfigId = selectedConfig.Id;
+                    game.CloudConfigId = selectedOption.Config?.Id;
                 }
                 else
                 {
