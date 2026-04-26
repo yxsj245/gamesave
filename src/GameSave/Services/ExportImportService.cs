@@ -201,9 +201,7 @@ public class ExportImportService
 
             // 统计该游戏的存档数量
             var gameId = Path.GetDirectoryName(entry.FullName)?.Replace('\\', '/').TrimEnd('/') ?? "";
-            int saveCount = archive.Entries.Count(e =>
-                e.FullName.StartsWith($"{gameId}/saves/", StringComparison.OrdinalIgnoreCase) &&
-                e.FullName.EndsWith(".tar", StringComparison.OrdinalIgnoreCase));
+            int saveCount = archive.Entries.Count(e => IsImportedSaveEntry(gameId, e.FullName));
 
             // 检查是否已存在（名称匹配或 ID 匹配）
             bool alreadyExists = existingGames.Any(g =>
@@ -295,7 +293,10 @@ public class ExportImportService
             int savesExtracted = 0;
             foreach (var gameAssetEntry in gameAssetEntries)
             {
-                var relativePath = gameAssetEntry.FullName[(gameId.Length + 1)..].Replace('/', Path.DirectorySeparatorChar);
+                var relativePath = GetImportRelativePath(gameId, gameAssetEntry.FullName);
+                if (string.IsNullOrWhiteSpace(relativePath))
+                    continue;
+
                 var targetPath = Path.Combine(gameWorkDir, relativePath);
 
                 var targetDir = Path.GetDirectoryName(targetPath);
@@ -327,6 +328,46 @@ public class ExportImportService
 
         var details = string.Join("\n", detailLines);
         return (imported, skipped, details);
+    }
+
+    #endregion
+
+    #region 导入路径兼容
+
+    /// <summary>
+    /// 判断导入包中的条目是否为存档文件。
+    /// 兼容旧结构（根目录 tar）与当前导出结构（saves/tar）。
+    /// </summary>
+    private static bool IsImportedSaveEntry(string gameId, string entryFullName)
+    {
+        var relativePath = GetImportRelativePath(gameId, entryFullName);
+        return !string.IsNullOrWhiteSpace(relativePath) &&
+               relativePath.EndsWith(".tar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 将导入包中的相对路径转换为本地工作目录中的目标相对路径。
+    /// 导出包中的 saves/*.tar 会自动平铺到工作目录根部，便于现有存档扫描逻辑识别。
+    /// </summary>
+    private static string? GetImportRelativePath(string gameId, string entryFullName)
+    {
+        if (string.IsNullOrWhiteSpace(gameId) ||
+            !entryFullName.StartsWith($"{gameId}/", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var relativePath = entryFullName[(gameId.Length + 1)..].Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return null;
+
+        if (relativePath.StartsWith("saves/", StringComparison.OrdinalIgnoreCase) &&
+            relativePath.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetFileName(relativePath);
+        }
+
+        return relativePath.Replace('/', Path.DirectorySeparatorChar);
     }
 
     #endregion
