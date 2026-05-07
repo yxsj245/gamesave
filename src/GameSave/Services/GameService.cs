@@ -122,7 +122,7 @@ public class GameService
             (File.Exists(p) && !Directory.Exists(p)));
         if (anyHasFiles)
         {
-            bool needHotBackup = !game.HasProcessPath;
+            bool needHotBackup = !game.HasAnyLaunchMethod;
             await _localStorageService.CreateExitSaveAsync(game, useHotBackup: needHotBackup);
         }
 
@@ -143,8 +143,18 @@ public class GameService
     /// <returns>操作是否成功</returns>
     public async Task<bool> LaunchGameAsync(Game game, Func<Task<bool>>? onTarInvalid = null)
     {
-        if (string.IsNullOrWhiteSpace(game.ProcessPath))
-            throw new InvalidOperationException("未设置游戏启动进程路径");
+        // 验证启动方式
+        if (game.LaunchViaSteam)
+        {
+            if (string.IsNullOrWhiteSpace(game.SteamAppId))
+                throw new InvalidOperationException("未设置 Steam App ID");
+            // Steam 模式下进程路径可选：有则监测退出自动备份，无则仅启动不监测
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(game.ProcessPath))
+                throw new InvalidOperationException("未设置游戏启动进程路径");
+        }
 
         // 清除上次启动错误
         LastLaunchError = null;
@@ -283,8 +293,45 @@ public class GameService
         var processEntries = game.AllProcessEntries;
         System.Diagnostics.Process? process = null;
         List<System.Diagnostics.Process> allProcesses = new();
+        bool isSteamLaunch = game.LaunchViaSteam;
+        bool steamNoMonitoring = isSteamLaunch && !game.HasProcessPath;
 
-        if (processEntries.Count > 1)
+        if (isSteamLaunch)
+        {
+            // Steam 启动模式：通过 steam://rungameid/{appId} 协议启动
+            process = _processMonitorService.LaunchViaSteamProtocol(game.SteamAppId!);
+            if (process != null)
+            {
+                allProcesses.Add(process);
+            }
+
+            // 如果还有配置的附加进程，按顺序启动
+            if (processEntries.Count > 1)
+            {
+                // 跳过主进程条目（Steam 已代替），只启动第二进程
+                var secondaryEntries = processEntries.Skip(1).ToList();
+                if (secondaryEntries.Count > 0)
+                {
+                    var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(secondaryEntries);
+                    if (!multiResult.Success)
+                    {
+                        game.LaunchStatusMessage = string.Empty;
+                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        {
+                            Status = GameRunStatus.Idle,
+                            GameName = game.Name,
+                            GameId = game.Id,
+                            Message = multiResult.ErrorMessage ?? "启动失败"
+                        });
+                        LastLaunchError = multiResult.ErrorMessage;
+                        ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
+                        return false;
+                    }
+                    allProcesses.AddRange(multiResult.LaunchedProcesses);
+                }
+            }
+        }
+        else if (processEntries.Count > 1)
         {
             // 多进程模式：顺序启动，前一个成功后再启动下一个
             var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(processEntries);
@@ -309,24 +356,60 @@ public class GameService
         else
         {
             // 单进程模式：保持原有逻辑
-            process = _processMonitorService.LaunchProcess(game.ProcessPath, game.ProcessArgs);
-            if (process == null)
-                throw new InvalidOperationException("启动游戏进程失败");
-            allProcesses.Add(process);
+            if (!isSteamLaunch)
+            {
+                process = _processMonitorService.LaunchProcess(game.ProcessPath!, game.ProcessArgs);
+                if (process == null)
+                    throw new InvalidOperationException("启动游戏进程失败");
+                allProcesses.Add(process);
+            }
         }
 
-        if (process == null)
+        if (process == null && !isSteamLaunch)
             throw new InvalidOperationException("启动游戏进程失败");
 
-        IsGameRunning = true;
+        if (steamNoMonitoring)
+        {
+            // 无监测模式：不设 IsGameRunning，直接跳过
+        }
+        else
+        {
+            IsGameRunning = true;
+        }
         RunningGameId = game.Id;
-        RunningProcessId = process.Id;
-        RunningProcessIds = allProcesses.Select(p => p.Id).ToList();
-        RunningProcessName = process.ProcessName;
-        RunningProcessNames = allProcesses.Select(p => p.ProcessName).ToList();
-        game.IsRunning = true;
-        game.RunningPid = process.Id; // 设置主进程 PID 供列表项显示
-        game.RunningPids = allProcesses.Select(p => p.Id).ToList(); // 设置所有进程 PID
+
+        if (isSteamLaunch)
+        {
+            if (steamNoMonitoring)
+            {
+                // 无进程路径的 Steam 启动：不设运行状态（无法监测）
+                RunningProcessId = 0;
+                RunningProcessIds.Clear();
+                RunningProcessName = null;
+                RunningProcessNames.Clear();
+            }
+            else
+            {
+                // Steam 启动模式：使用 Steam 作为进程标识
+                RunningProcessId = process?.Id ?? 0;
+                RunningProcessIds = allProcesses.Select(p => p.Id).ToList();
+                RunningProcessName = "Steam";
+                RunningProcessNames = allProcesses.Select(p => p.ProcessName).ToList();
+                game.IsRunning = true;
+                game.RunningPid = process?.Id ?? 0;
+                game.RunningPids = allProcesses.Select(p => p.Id).ToList();
+            }
+        }
+        else
+        {
+            RunningProcessId = process!.Id;
+            RunningProcessIds = allProcesses.Select(p => p.Id).ToList();
+            RunningProcessName = process.ProcessName;
+            RunningProcessNames = allProcesses.Select(p => p.ProcessName).ToList();
+            game.IsRunning = true;
+            game.RunningPid = process.Id;
+            game.RunningPids = allProcesses.Select(p => p.Id).ToList();
+        }
         game.LaunchStatusMessage = string.Empty; // 启动完成，清空启动状态消息
 
         // 启动定时备份（如果已配置）
@@ -336,24 +419,81 @@ public class GameService
         }
 
         // 通知：游戏运行中（启动完成）
-        var pidDisplay = allProcesses.Count > 1
-            ? string.Join(", ", allProcesses.Select(p => p.Id))
-            : process.Id.ToString();
+        var pidDisplay = isSteamLaunch
+            ? $"Steam (App ID: {game.SteamAppId})"
+            : allProcesses.Count > 1
+                ? string.Join(", ", allProcesses.Select(p => p.Id))
+                : process!.Id.ToString();
         StatusChanged?.Invoke(this, new GameStatusInfo
         {
             Status = GameRunStatus.Running,
             GameName = game.Name,
             GameId = game.Id,
-            ProcessId = process.Id,
-            Message = $"游戏 {game.Name} 运行中 (PID: {pidDisplay})"
+            ProcessId = process?.Id ?? 0,
+            Message = $"游戏 {game.Name} 运行中 ({pidDisplay})"
         });
 
-        // 3. 后台监测进程退出（支持多进程，所有进程全部退出后再备份）
+        // 3. 后台监测进程退出（支持多进程/Steam启动）
+        // 无进程路径的 Steam 启动跳过监测，直接清理状态
+        if (steamNoMonitoring)
+        {
+            // 短暂延迟后恢复空闲，释放 Steam 客户端进程引用
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // 释放 Steam 进程引用
+                    foreach (var p in allProcesses)
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+
+                    // 短暂延迟后恢复状态
+                    await Task.Delay(2000);
+
+                    IsGameRunning = false;
+                    RunningGameId = null;
+
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Completed,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"已通过 Steam 启动 {game.Name}（未设置进程监测，退出后不会自动备份）"
+                    });
+
+                    await Task.Delay(3000);
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Idle,
+                        Message = "同步就绪"
+                    });
+                }
+                catch { }
+            });
+
+            return true;
+        }
+
         var capturedProcesses = new List<System.Diagnostics.Process>(allProcesses);
+        var capturedProcessName = Path.GetFileNameWithoutExtension(game.ProcessPath) ?? string.Empty;
+        var capturedSteamAppId = game.SteamAppId;
         _ = Task.Run(async () =>
         {
             ProcessExitType exitType;
-            if (capturedProcesses.Count > 1)
+            if (isSteamLaunch)
+            {
+                // Steam 启动模式：使用专用的 Steam 进程等待方法
+                exitType = await _processMonitorService.WaitForSteamLaunchedProcessExitAsync(
+                    capturedProcessName, capturedSteamAppId ?? "");
+
+                // 释放可能捕获的 Steam 客户端进程
+                foreach (var p in capturedProcesses)
+                {
+                    try { p.Dispose(); } catch { }
+                }
+            }
+            else if (capturedProcesses.Count > 1)
             {
                 // 多进程：等待所有进程退出
                 exitType = await _processMonitorService.WaitForAllProcessesExitAsync(capturedProcesses);
@@ -362,8 +502,8 @@ public class GameService
             else
             {
                 // 单进程：保持原有逻辑
-                exitType = await _processMonitorService.WaitForExitAsync(process);
-                process.Dispose();
+                exitType = await _processMonitorService.WaitForExitAsync(process!);
+                process!.Dispose();
             }
 
             IsGameRunning = false;
@@ -538,10 +678,10 @@ public class GameService
         });
 
         // 判断是否需要热备份：
-        // - 无进程路径 → 无法判断游戏是否在外部运行，走热备份
-        // - 有进程路径且游戏正在运行 → 热备份（避免文件锁定冲突）
-        // - 有进程路径且游戏未运行 → 直接模式（节省内存）
-        bool needHotBackup = !game.HasProcessPath || ProcessMonitorService.IsProcessRunning(game.ProcessPath);
+        // - 无启动方式 → 无法判断游戏是否在外部运行，走热备份
+        // - 有启动方式且游戏正在运行 → 热备份（避免文件锁定冲突）
+        // - 有启动方式且游戏未运行 → 直接模式（节省内存）
+        bool needHotBackup = !game.HasAnyLaunchMethod || ProcessMonitorService.IsProcessRunning(game.ProcessPath);
 
         var save = await _localStorageService.BackupSaveAsync(game, name, null, progress, needHotBackup);
         BackupCompleted?.Invoke(this, save);

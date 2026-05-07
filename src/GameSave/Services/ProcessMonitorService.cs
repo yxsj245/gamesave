@@ -274,6 +274,65 @@ public class ProcessMonitorService
     }
 
     /// <summary>
+    /// 通过 Steam 协议启动游戏（steam://rungameid/{appId}）
+    /// 使用 ShellExecute 打开 URI，由 Steam 客户端处理启动
+    /// </summary>
+    /// <param name="steamAppId">Steam 应用程序 ID</param>
+    /// <returns>启动的进程对象（Steam 客户端或 URI 处理器），可能为 null</returns>
+    public Process? LaunchViaSteamProtocol(string steamAppId)
+    {
+        if (string.IsNullOrWhiteSpace(steamAppId))
+            throw new ArgumentException("Steam App ID 不能为空", nameof(steamAppId));
+
+        var steamUri = $"steam://rungameid/{steamAppId}";
+
+        Debug.WriteLine($"[进程启动] 通过 Steam 协议启动游戏: {steamUri}");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = steamUri,
+            UseShellExecute = true
+        };
+
+        try
+        {
+            return Process.Start(startInfo);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[进程启动] Steam 协议启动失败: {ex.Message}");
+            throw new InvalidOperationException($"无法通过 Steam 启动游戏（App ID: {steamAppId}）。请确保 Steam 客户端已安装并正在运行。", ex);
+        }
+    }
+
+    /// <summary>
+    /// 等待 Steam 协议启动的游戏进程出现并进入轮询监测模式
+    /// 适用于通过 steam://rungameid/ 启动的进程，因为返回的 Steam 客户端进程会快速退出
+    /// </summary>
+    /// <param name="processName">目标游戏进程名（从 ProcessPath 获取）</param>
+    /// <param name="steamAppId">Steam App ID（用于日志）</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>进程退出类型</returns>
+    public async Task<ProcessExitType> WaitForSteamLaunchedProcessExitAsync(
+        string processName, string steamAppId, CancellationToken cancellationToken = default)
+    {
+        Debug.WriteLine($"[进程监测] Steam 启动模式：等待进程 {processName} 出现（App ID: {steamAppId}）");
+
+        // 先等待 Steam 转交给游戏进程
+        try
+        {
+            await Task.Delay(SteamLaunchDelayMs, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return ProcessExitType.Cancelled;
+        }
+
+        // 进入进程名轮询模式
+        return await PollProcessByNameAsync(processName, cancellationToken);
+    }
+
+    /// <summary>
     /// 异步等待进程退出，支持 Steam 游戏 stub 进程的自动检测
     /// 当进程在短时间内退出时（疑似 Steam stub），会自动切换到进程名轮询模式
     /// </summary>

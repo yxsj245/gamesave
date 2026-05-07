@@ -671,11 +671,11 @@
                         </StackPanel>
                         
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Spacing="8">
-                            <!-- 启动游戏（仅设置了进程路径时显示） -->
+                            <!-- 启动游戏（设置了启动方式时显示） -->
                             <Button Click="LaunchGame_Click"
                                     Style="{StaticResource AccentButtonStyle}"
                                     ToolTipService.ToolTip="启动游戏"
-                                    Visibility="{Binding SelectedGame.HasProcessPath, Converter={StaticResource BoolVisibilityConverter}}">
+                                    Visibility="{Binding SelectedGame.HasAnyLaunchMethod, Converter={StaticResource BoolVisibilityConverter}}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xE768;" FontSize="14"/>
                                     <TextBlock Text="启动"/>

@@ -8,6 +8,17 @@ using Microsoft.UI.Xaml.Media.Imaging;
 namespace GameSave.Models;
 
 /// <summary>
+/// 游戏启动方式
+/// </summary>
+public enum LaunchMethod
+{
+    /// <summary>直接启动（通过 exe 进程路径）</summary>
+    Direct = 0,
+    /// <summary>通过 Steam 客户端启动</summary>
+    Steam = 1
+}
+
+/// <summary>
 /// 游戏信息模型
 /// </summary>
 public class Game : INotifyPropertyChanged
@@ -105,6 +116,20 @@ public class Game : INotifyPropertyChanged
     [JsonIgnore]
     public bool HasSource => !string.IsNullOrEmpty(Source) && Source != "手动添加";
 
+    /// <summary>Steam App ID（Steam 游戏专属，用于通过 Steam 客户端启动）</summary>
+    public string? SteamAppId { get; set; }
+
+    /// <summary>游戏启动方式（直接启动或通过 Steam 客户端启动）</summary>
+    public LaunchMethod GameLaunchMethod { get; set; } = LaunchMethod.Direct;
+
+    /// <summary>是否设置了 Steam App ID</summary>
+    [JsonIgnore]
+    public bool HasSteamAppId => !string.IsNullOrWhiteSpace(SteamAppId);
+
+    /// <summary>是否通过 Steam 启动</summary>
+    [JsonIgnore]
+    public bool LaunchViaSteam => GameLaunchMethod == LaunchMethod.Steam && HasSteamAppId;
+
     /// <summary>是否启用定时备份</summary>
     public bool ScheduledBackupEnabled { get; set; } = false;
 
@@ -132,13 +157,13 @@ public class Game : INotifyPropertyChanged
         }
     }
 
-    /// <summary>是否显示手动启动定时备份按钮（无启动进程 + 已启用定时备份 + 未运行中）</summary>
+    /// <summary>是否显示手动启动定时备份按钮（无启动方式 + 已启用定时备份 + 未运行中）</summary>
     [JsonIgnore]
-    public bool CanShowScheduledBackupStart => !HasProcessPath && ScheduledBackupEnabled && !IsScheduledBackupRunning;
+    public bool CanShowScheduledBackupStart => !HasAnyLaunchMethod && ScheduledBackupEnabled && !IsScheduledBackupRunning;
 
-    /// <summary>是否显示手动停止定时备份按钮（无启动进程 + 已启用定时备份 + 运行中）</summary>
+    /// <summary>是否显示手动停止定时备份按钮（无启动方式 + 已启用定时备份 + 运行中）</summary>
     [JsonIgnore]
-    public bool CanShowScheduledBackupStop => !HasProcessPath && ScheduledBackupEnabled && IsScheduledBackupRunning;
+    public bool CanShowScheduledBackupStop => !HasAnyLaunchMethod && ScheduledBackupEnabled && IsScheduledBackupRunning;
 
     /// <summary>是否设置了启动进程路径</summary>
     [JsonIgnore]
@@ -147,6 +172,10 @@ public class Game : INotifyPropertyChanged
     /// <summary>是否设置了第二启动进程路径</summary>
     [JsonIgnore]
     public bool HasSecondaryProcessPath => !string.IsNullOrWhiteSpace(SecondaryProcessPath);
+
+    /// <summary>是否有可用的启动方式（直接启动有进程路径，或 Steam 启动有 App ID）</summary>
+    [JsonIgnore]
+    public bool HasAnyLaunchMethod => HasProcessPath || LaunchViaSteam;
 
     /// <summary>获取所有配置的启动进程路径（按顺序）</summary>
     [JsonIgnore]
@@ -287,9 +316,9 @@ public class Game : INotifyPropertyChanged
     [JsonIgnore]
     public bool HasLaunchStatus => !string.IsNullOrEmpty(LaunchStatusMessage);
 
-    /// <summary>是否显示启动按钮（有进程路径且未运行且未在停止中）</summary>
+    /// <summary>是否显示启动按钮（有可用启动方式且未运行且未在停止中）</summary>
     [JsonIgnore]
-    public bool CanShowStartButton => HasProcessPath && !IsRunning && !IsStopping;
+    public bool CanShowStartButton => HasAnyLaunchMethod && !IsRunning && !IsStopping;
 
     private bool _isStopping;
     /// <summary>指示游戏是否正在停止中（显示转圈加载反馈）</summary>
@@ -310,9 +339,9 @@ public class Game : INotifyPropertyChanged
         }
     }
 
-    /// <summary>是否显示停止按钮（有进程路径且正在运行且未在停止中）</summary>
+    /// <summary>是否显示停止按钮（有可用启动方式且正在运行且未在停止中）</summary>
     [JsonIgnore]
-    public bool CanShowStopButton => HasProcessPath && IsRunning && !IsStopping;
+    public bool CanShowStopButton => HasAnyLaunchMethod && IsRunning && !IsStopping;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

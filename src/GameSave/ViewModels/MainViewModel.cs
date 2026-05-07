@@ -226,6 +226,22 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _newGameSecondaryProcessArgs, value);
     }
 
+    // Steam App ID（仅 Steam 来源游戏使用）
+    private string _newGameSteamAppId = string.Empty;
+    public string NewGameSteamAppId
+    {
+        get => _newGameSteamAppId;
+        set => SetProperty(ref _newGameSteamAppId, value);
+    }
+
+    // 游戏启动方式
+    private Models.LaunchMethod _newGameLaunchMethod = Models.LaunchMethod.Direct;
+    public Models.LaunchMethod NewGameLaunchMethod
+    {
+        get => _newGameLaunchMethod;
+        set => SetProperty(ref _newGameLaunchMethod, value);
+    }
+
     // 云端服务商配置列表（供添加游戏表单下拉框使用）
     private ObservableCollection<CloudConfig> _cloudConfigs = new();
     public ObservableCollection<CloudConfig> CloudConfigs
@@ -436,6 +452,8 @@ public partial class MainViewModel : BaseViewModel
         NewGameProcessArgs = string.Empty;
         NewGameSecondaryProcessPath = string.Empty;
         NewGameSecondaryProcessArgs = string.Empty;
+        NewGameSteamAppId = string.Empty;
+        NewGameLaunchMethod = Models.LaunchMethod.Direct;
         NewGameIconPath = null;
         SelectedCloudConfigId = null;
         NewGameScheduledBackupEnabled = false;
@@ -476,6 +494,8 @@ public partial class MainViewModel : BaseViewModel
                 ProcessArgs = string.IsNullOrWhiteSpace(NewGameProcessArgs) ? null : NewGameProcessArgs.Trim(),
                 SecondaryProcessPath = string.IsNullOrWhiteSpace(NewGameSecondaryProcessPath) ? null : NewGameSecondaryProcessPath.Trim(),
                 SecondaryProcessArgs = string.IsNullOrWhiteSpace(NewGameSecondaryProcessArgs) ? null : NewGameSecondaryProcessArgs.Trim(),
+                SteamAppId = string.IsNullOrWhiteSpace(NewGameSteamAppId) ? null : NewGameSteamAppId.Trim(),
+                GameLaunchMethod = NewGameLaunchMethod,
                 CloudConfigId = SelectedCloudConfigId,
                 ScheduledBackupEnabled = NewGameScheduledBackupEnabled,
                 ScheduledBackupIntervalMinutes = NewGameScheduledBackupInterval,
@@ -541,6 +561,10 @@ public partial class MainViewModel : BaseViewModel
                         ProcessArgs = string.IsNullOrWhiteSpace(detected.ProcessArgs) ? null : detected.ProcessArgs.Trim(),
                         CloudConfigId = detected.CloudConfigId,
                         Source = detected.Source,
+                        SteamAppId = detected.SteamAppId,
+                        GameLaunchMethod = !string.IsNullOrWhiteSpace(detected.SteamAppId)
+                            ? Models.LaunchMethod.Steam
+                            : Models.LaunchMethod.Direct,
                         ScheduledBackupEnabled = detected.ScheduledBackupEnabled,
                         ScheduledBackupIntervalMinutes = detected.ScheduledBackupIntervalMinutes,
                         ScheduledBackupMaxCount = detected.ScheduledBackupMaxCount
@@ -614,9 +638,9 @@ public partial class MainViewModel : BaseViewModel
                 ApplySearchFilter();
             }
 
-            // 更新定时备份状态：对于无启动进程的游戏，更新配置后重新启停定时备份
-            // 有启动进程的游戏定时备份跟随游戏生命周期，不在此处理
-            if (!game.HasProcessPath)
+            // 更新定时备份状态：对于无启动方式的游戏，更新配置后重新启停定时备份
+            // 有启动方式的游戏定时备份跟随游戏生命周期，不在此处理
+            if (!game.HasAnyLaunchMethod)
             {
                 if (game.ScheduledBackupEnabled && game.IsScheduledBackupRunning)
                 {
@@ -1172,7 +1196,7 @@ public partial class MainViewModel : BaseViewModel
     /// </summary>
     public void StartScheduledBackupManual(Game game)
     {
-        if (game.HasProcessPath || !game.ScheduledBackupEnabled)
+        if (game.HasAnyLaunchMethod || !game.ScheduledBackupEnabled)
             return;
 
         _scheduledBackupService.StartScheduledBackup(game);

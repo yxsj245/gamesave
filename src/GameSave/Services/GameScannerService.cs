@@ -19,6 +19,9 @@ public class DetectedGame
     /// <summary>来源平台（Steam / Epic / GOG / Ubisoft / EA / Battle.net）</summary>
     public string Source { get; set; } = string.Empty;
 
+    /// <summary>Steam App ID（仅 Steam 来源的游戏有值）</summary>
+    public string? SteamAppId { get; set; }
+
     /// <summary>是否被用户勾选导入</summary>
     public bool IsSelected { get; set; } = true;
 
@@ -224,6 +227,14 @@ public class GameScannerService
         if (!Directory.Exists(fullInstallPath))
             return null;
 
+        // 从文件名中提取 Steam App ID（appmanifest_<appId>.acf）
+        var steamAppId = System.Text.RegularExpressions.Regex.Match(
+            Path.GetFileName(manifestPath),
+            @"appmanifest_(\d+)\.acf"
+        ).Groups[1].Value;
+        if (string.IsNullOrEmpty(steamAppId))
+            steamAppId = null;
+
         // 排除 Steam 平台工具（Steamworks Common Redistributables 等）
         if (name.Contains("Redistributable", StringComparison.OrdinalIgnoreCase) ||
             name.Contains("Proton", StringComparison.OrdinalIgnoreCase) ||
@@ -238,7 +249,8 @@ public class GameScannerService
             Name = name,
             InstallPath = fullInstallPath,
             ExePath = exePath,
-            Source = "Steam"
+            Source = "Steam",
+            SteamAppId = steamAppId
         };
     }
 

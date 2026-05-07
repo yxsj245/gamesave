@@ -760,9 +760,9 @@ namespace GameSave.Views
                 else
                 {
                     // 启动游戏
-                    if (string.IsNullOrWhiteSpace(game.ProcessPath))
+                    if (!game.HasAnyLaunchMethod)
                     {
-                        await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                        await ShowMessageAsync("无法启动", "该游戏未设置启动方式（需设置启动进程路径，或 Steam 游戏的 App ID），请编辑游戏信息后再试。");
                         return;
                     }
 
@@ -1993,9 +1993,9 @@ namespace GameSave.Views
         {
             if (ViewModel.SelectedGame == null) return;
 
-            if (string.IsNullOrWhiteSpace(ViewModel.SelectedGame.ProcessPath))
+            if (!ViewModel.SelectedGame.HasAnyLaunchMethod)
             {
-                await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                await ShowMessageAsync("无法启动", "该游戏未设置启动方式（需设置启动进程路径，或 Steam 游戏的 App ID），请编辑游戏信息后再试。");
                 return;
             }
 
@@ -2510,9 +2510,9 @@ namespace GameSave.Views
             var game = GetGameFromContext(sender);
             if (game == null) return;
 
-            if (string.IsNullOrWhiteSpace(game.ProcessPath))
+            if (!game.HasAnyLaunchMethod)
             {
-                await ShowMessageAsync("无法启动", "该游戏未设置启动进程路径，请编辑游戏信息后再试。");
+                await ShowMessageAsync("无法启动", "该游戏未设置启动方式（需设置启动进程路径，或 Steam 游戏的 App ID），请编辑游戏信息后再试。");
                 return;
             }
 
@@ -2940,6 +2940,85 @@ namespace GameSave.Views
                 Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
             });
 
+            // ========== 启动方式选择（前置） ==========
+            RadioButtons? editLaunchMethodRadios = null;
+            TextBox? editSteamAppIdBox = null;
+            StackPanel? editSteamAppIdRow = null;
+            StackPanel? editDirectProcessFieldsPanel = null;
+            TextBlock? editProcessPathLabel = null;
+
+            var isSteamGame = game.Source == "Steam";
+
+            if (isSteamGame)
+            {
+                editLaunchMethodRadios = new RadioButtons
+                {
+                    Header = "启动方式",
+                    Items =
+                    {
+                        "直接启动（通过 exe 进程路径）",
+                        "从 Steam 启动（通过 Steam 客户端）"
+                    },
+                    SelectedIndex = game.GameLaunchMethod == Models.LaunchMethod.Steam ? 1 : 0
+                };
+            }
+            else
+            {
+                editLaunchMethodRadios = new RadioButtons
+                {
+                    Header = "启动方式",
+                    Items =
+                    {
+                        "直接启动（通过 exe 进程路径）"
+                    },
+                    SelectedIndex = 0
+                };
+            }
+            panel.Children.Add(editLaunchMethodRadios);
+
+            // ========== Steam App ID 输入（仅 Steam 游戏且选了 Steam 模式时可见） ==========
+            if (isSteamGame)
+            {
+                editSteamAppIdRow = new StackPanel { Spacing = 6 };
+
+                editSteamAppIdRow.Children.Add(new TextBlock
+                {
+                    Text = "需要填入 Steam App ID，启动时将调用 Steam 客户端启动游戏",
+                    FontSize = 12,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+                });
+
+                editSteamAppIdBox = new TextBox
+                {
+                    Header = "Steam App ID",
+                    PlaceholderText = "例如: 730（CS:GO），可在 Steam 商店 URL 或 appmanifest 文件中找到",
+                    Text = game.SteamAppId ?? string.Empty
+                };
+                editSteamAppIdRow.Children.Add(editSteamAppIdBox);
+
+                editSteamAppIdRow.Visibility = game.GameLaunchMethod == Models.LaunchMethod.Steam
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+                panel.Children.Add(editSteamAppIdRow);
+            }
+
+            // ========== 进程路径设置区域（始终显示） ==========
+            editDirectProcessFieldsPanel = new StackPanel { Spacing = 8 };
+
+            // 说明文字：Steam 模式下提示进程路径用途
+            editProcessPathLabel = new TextBlock
+            {
+                Text = "提示：设置进程路径后可在退出时自动备份存档（可选）",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Visibility = isSteamGame && game.GameLaunchMethod == Models.LaunchMethod.Steam
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            editDirectProcessFieldsPanel.Children.Add(editProcessPathLabel);
+
             // 主启动进程
             var processPathPanel = new Grid();
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2947,7 +3026,7 @@ namespace GameSave.Views
 
             var processPathBox = new TextBox
             {
-                Header = "主启动进程（可选）",
+                Header = "主启动进程（可选，用于退出监测和自动备份）",
                 PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式",
                 Text = game.ProcessPath ?? string.Empty
             };
@@ -2997,9 +3076,9 @@ namespace GameSave.Views
 
             processPathPanel.Children.Add(processPathBox);
             processPathPanel.Children.Add(browseProcessBtn);
-            panel.Children.Add(processPathPanel);
+            editDirectProcessFieldsPanel!.Children.Add(processPathPanel);
 
-            panel.Children.Add(argsBox);
+            editDirectProcessFieldsPanel.Children.Add(argsBox);
 
             // 第二启动进程
             var editSecondaryProcessPathPanel = new Grid();
@@ -3058,9 +3137,37 @@ namespace GameSave.Views
 
             editSecondaryProcessPathPanel.Children.Add(editSecondaryProcessPathBox);
             editSecondaryProcessPathPanel.Children.Add(browseEditSecondaryProcessBtn);
-            panel.Children.Add(editSecondaryProcessPathPanel);
+            editDirectProcessFieldsPanel.Children.Add(editSecondaryProcessPathPanel);
 
-            panel.Children.Add(editSecondaryArgsBox);
+            editDirectProcessFieldsPanel.Children.Add(editSecondaryArgsBox);
+
+            panel.Children.Add(editDirectProcessFieldsPanel);
+
+            // 切换启动方式时联动显示/隐藏 Steam App ID 和提示文字
+            if (isSteamGame && editLaunchMethodRadios != null)
+            {
+                editLaunchMethodRadios.SelectionChanged += (s, args) =>
+                {
+                    var isSteamMode = editLaunchMethodRadios.SelectedIndex == 1;
+                    if (editSteamAppIdRow != null)
+                    {
+                        editSteamAppIdRow.Visibility = isSteamMode
+                            ? Microsoft.UI.Xaml.Visibility.Visible
+                            : Microsoft.UI.Xaml.Visibility.Collapsed;
+                    }
+                    if (editProcessPathLabel != null)
+                    {
+                        editProcessPathLabel.Visibility = isSteamMode
+                            ? Microsoft.UI.Xaml.Visibility.Visible
+                            : Microsoft.UI.Xaml.Visibility.Collapsed;
+                    }
+                };
+
+                // 初始化提示文字可见性
+                editProcessPathLabel.Visibility = editLaunchMethodRadios.SelectedIndex == 1
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
 
             // 云端服务商（可选）
             ComboBox? cloudConfigComboBox = null;
@@ -3225,6 +3332,14 @@ namespace GameSave.Views
                 game.ProcessArgs = string.IsNullOrWhiteSpace(argsBox.Text) ? null : argsBox.Text.Trim();
                 game.SecondaryProcessPath = string.IsNullOrWhiteSpace(editSecondaryProcessPathBox.Text) ? null : editSecondaryProcessPathBox.Text.Trim();
                 game.SecondaryProcessArgs = string.IsNullOrWhiteSpace(editSecondaryArgsBox.Text) ? null : editSecondaryArgsBox.Text.Trim();
+
+                if (game.Source == "Steam" && editLaunchMethodRadios != null && editSteamAppIdBox != null)
+                {
+                    game.GameLaunchMethod = editLaunchMethodRadios.SelectedIndex == 1
+                        ? Models.LaunchMethod.Steam
+                        : Models.LaunchMethod.Direct;
+                    game.SteamAppId = string.IsNullOrWhiteSpace(editSteamAppIdBox.Text) ? null : editSteamAppIdBox.Text.Trim();
+                }
 
                 if (iconWasCleared)
                 {
