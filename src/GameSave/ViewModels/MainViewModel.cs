@@ -242,6 +242,13 @@ public partial class MainViewModel : BaseViewModel
         set => SetProperty(ref _newGameLaunchMethod, value);
     }
 
+    private string _newGameSource = string.Empty;
+    public string NewGameSource
+    {
+        get => _newGameSource;
+        set => SetProperty(ref _newGameSource, value);
+    }
+
     // 云端服务商配置列表（供添加游戏表单下拉框使用）
     private ObservableCollection<CloudConfig> _cloudConfigs = new();
     public ObservableCollection<CloudConfig> CloudConfigs
@@ -454,6 +461,7 @@ public partial class MainViewModel : BaseViewModel
         NewGameSecondaryProcessArgs = string.Empty;
         NewGameSteamAppId = string.Empty;
         NewGameLaunchMethod = Models.LaunchMethod.Direct;
+        NewGameSource = string.Empty;
         NewGameIconPath = null;
         SelectedCloudConfigId = null;
         NewGameScheduledBackupEnabled = false;
@@ -496,6 +504,7 @@ public partial class MainViewModel : BaseViewModel
                 SecondaryProcessArgs = string.IsNullOrWhiteSpace(NewGameSecondaryProcessArgs) ? null : NewGameSecondaryProcessArgs.Trim(),
                 SteamAppId = string.IsNullOrWhiteSpace(NewGameSteamAppId) ? null : NewGameSteamAppId.Trim(),
                 GameLaunchMethod = NewGameLaunchMethod,
+                Source = string.IsNullOrWhiteSpace(NewGameSource) ? "手动添加" : NewGameSource.Trim(),
                 CloudConfigId = SelectedCloudConfigId,
                 ScheduledBackupEnabled = NewGameScheduledBackupEnabled,
                 ScheduledBackupIntervalMinutes = NewGameScheduledBackupInterval,

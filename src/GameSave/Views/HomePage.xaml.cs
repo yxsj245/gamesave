@@ -1170,6 +1170,81 @@ namespace GameSave.Views
                 Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4)
             });
 
+            // 来源平台
+            var addSourceCombo = new ComboBox
+            {
+                Header = "来源平台",
+                PlaceholderText = "手动添加",
+                ItemsSource = new List<string> { "手动添加", "Steam", "Epic", "GOG", "Ubisoft", "EA", "Battle.net" }
+            };
+            panel.Children.Add(addSourceCombo);
+
+            // 启动方式选择
+            var addLaunchMethodRadios = new RadioButtons
+            {
+                Header = "启动方式",
+                Items =
+                {
+                    "直接启动（通过 exe 进程路径）"
+                },
+                SelectedIndex = 0
+            };
+            panel.Children.Add(addLaunchMethodRadios);
+
+            // Steam App ID（仅选Steam + Steam启动方式时可见）
+            var addSteamAppIdPanel = new StackPanel { Spacing = 6, Visibility = Microsoft.UI.Xaml.Visibility.Collapsed };
+            addSteamAppIdPanel.Children.Add(new TextBlock
+            {
+                Text = "需要填入 Steam App ID，启动时将调用 Steam 客户端启动游戏",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+            var addSteamAppIdBox = new TextBox
+            {
+                Header = "Steam App ID",
+                PlaceholderText = "例如: 730（CS:GO）"
+            };
+            addSteamAppIdPanel.Children.Add(addSteamAppIdBox);
+            panel.Children.Add(addSteamAppIdPanel);
+
+            // 来源切换时更新启动方式选项
+            addSourceCombo.SelectionChanged += (s, args) =>
+            {
+                var isSteam = addSourceCombo.SelectedItem is string selected && selected == "Steam";
+                addLaunchMethodRadios.Items.Clear();
+                addLaunchMethodRadios.Items.Add("直接启动（通过 exe 进程路径）");
+                if (isSteam)
+                {
+                    addLaunchMethodRadios.Items.Add("从 Steam 启动（通过 Steam 客户端）");
+                }
+                addLaunchMethodRadios.SelectedIndex = 0;
+                addSteamAppIdPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            };
+
+            // 启动方式切换时联动 Steam App ID
+            addLaunchMethodRadios.SelectionChanged += (s, args) =>
+            {
+                var showSteam = addLaunchMethodRadios.Items.Count > 1 && addLaunchMethodRadios.SelectedIndex == 1;
+                addSteamAppIdPanel.Visibility = showSteam
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+            };
+
+            // 提示文字
+            var addProcessLabel = new TextBlock
+            {
+                Text = "提示：设置进程路径后可在退出时自动备份存档",
+                FontSize = 12,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            panel.Children.Add(addProcessLabel);
+
+            // 进程路径设置区域
+            var addProcessFieldsPanel = new StackPanel { Spacing = 8 };
+
             // 主启动进程（可选）
             var processPathPanel = new Grid();
             processPathPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1177,7 +1252,7 @@ namespace GameSave.Views
 
             var processPathBox = new TextBox
             {
-                Header = "主启动进程（可选）",
+                Header = "主启动进程（可选，用于退出监测和自动备份）",
                 PlaceholderText = "支持 .exe 文件和 .lnk 快捷方式"
             };
             Grid.SetColumn(processPathBox, 0);
@@ -1227,9 +1302,9 @@ namespace GameSave.Views
 
             processPathPanel.Children.Add(processPathBox);
             processPathPanel.Children.Add(browseProcessBtn);
-            panel.Children.Add(processPathPanel);
+            addProcessFieldsPanel.Children.Add(processPathPanel);
 
-            panel.Children.Add(argsBox);
+            addProcessFieldsPanel.Children.Add(argsBox);
 
             // 第二启动进程（可选）
             var secondaryProcessPathPanel = new Grid();
@@ -1286,9 +1361,11 @@ namespace GameSave.Views
 
             secondaryProcessPathPanel.Children.Add(secondaryProcessPathBox);
             secondaryProcessPathPanel.Children.Add(browseSecondaryProcessBtn);
-            panel.Children.Add(secondaryProcessPathPanel);
+            addProcessFieldsPanel.Children.Add(secondaryProcessPathPanel);
 
-            panel.Children.Add(secondaryArgsBox);
+            addProcessFieldsPanel.Children.Add(secondaryArgsBox);
+
+            panel.Children.Add(addProcessFieldsPanel);
 
             panel.Children.Add(new TextBlock
             {
@@ -1406,6 +1483,10 @@ namespace GameSave.Views
                 ViewModel.NewGameSecondaryProcessPath = secondaryProcessPathBox.Text;
                 ViewModel.NewGameSecondaryProcessArgs = secondaryArgsBox.Text;
                 ViewModel.NewGameIconPath = selectedIconPath;
+                ViewModel.NewGameSource = addSourceCombo.SelectedItem is string src && src != "手动添加" ? src : string.Empty;
+                ViewModel.NewGameLaunchMethod = addLaunchMethodRadios.Items.Count > 1 && addLaunchMethodRadios.SelectedIndex == 1
+                    ? Models.LaunchMethod.Steam : Models.LaunchMethod.Direct;
+                ViewModel.NewGameSteamAppId = addSteamAppIdBox.Text;
 
                 // 设置选中的云端配置 ID
                 if (cloudConfigComboBox?.SelectedItem is CloudConfig selectedConfig)

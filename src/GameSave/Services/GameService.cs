@@ -390,14 +390,19 @@ public class GameService
             }
             else
             {
-                // Steam 启动模式：使用 Steam 作为进程标识
-                RunningProcessId = process?.Id ?? 0;
-                RunningProcessIds = allProcesses.Select(p => p.Id).ToList();
-                RunningProcessName = "Steam";
-                RunningProcessNames = allProcesses.Select(p => p.ProcessName).ToList();
+                // Steam 启动模式：只记录游戏进程名，不记录 Steam 客户端 PID（避免误杀 Steam 进程）
+                var gameProcessName = Path.GetFileNameWithoutExtension(game.ProcessPath) ?? string.Empty;
+                RunningProcessId = 0;
+                RunningProcessIds.Clear();
+                RunningProcessName = gameProcessName;
+                RunningProcessNames = new List<string> { gameProcessName };
+                if (!string.IsNullOrWhiteSpace(game.SecondaryProcessPath))
+                {
+                    RunningProcessNames.Add(Path.GetFileNameWithoutExtension(game.SecondaryProcessPath));
+                }
                 game.IsRunning = true;
-                game.RunningPid = process?.Id ?? 0;
-                game.RunningPids = allProcesses.Select(p => p.Id).ToList();
+                game.RunningPid = 0;
+                game.RunningPids = new List<int>();
             }
         }
         else
