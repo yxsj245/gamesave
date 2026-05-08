@@ -685,12 +685,13 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 启动选中的游戏
     /// </summary>
-    public async Task<(bool success, string message)> LaunchGameAsync()
+    public async Task<(bool success, string message)> LaunchGameAsync(
+        Func<Models.SaveConflictReport, Task<Models.ConflictResolution>>? onSaveConflict = null)
     {
         if (SelectedGame == null)
             return (false, "请先选择一个游戏");
 
-        if (string.IsNullOrWhiteSpace(SelectedGame.ProcessPath))
+        if (string.IsNullOrWhiteSpace(SelectedGame.ProcessPath) && !SelectedGame.LaunchViaSteam)
             return (false, "该游戏未设置启动进程路径");
 
         IsBusy = true;
@@ -698,14 +699,13 @@ public partial class MainViewModel : BaseViewModel
 
         try
         {
-            var result = await _gameService.LaunchGameAsync(SelectedGame);
+            var result = await _gameService.LaunchGameAsync(SelectedGame, onSaveConflict: onSaveConflict);
             if (result)
             {
                 StatusMessage = "游戏已启动，退出后将自动备份";
             }
             else
             {
-                // 读取启动失败的详细错误信息
                 StatusMessage = _gameService.LastLaunchError ?? "启动取消";
             }
             return (result, StatusMessage);
@@ -818,9 +818,10 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>
     /// 直接启动指定游戏（不触发详情面板），供列表按钮使用
     /// </summary>
-    public async Task<(bool success, string message)> LaunchGameDirectAsync(Game game)
+    public async Task<(bool success, string message)> LaunchGameDirectAsync(Game game,
+        Func<Models.SaveConflictReport, Task<Models.ConflictResolution>>? onSaveConflict = null)
     {
-        if (string.IsNullOrWhiteSpace(game.ProcessPath))
+        if (string.IsNullOrWhiteSpace(game.ProcessPath) && !game.LaunchViaSteam)
             return (false, "该游戏未设置启动进程路径");
 
         IsBusy = true;
@@ -828,7 +829,7 @@ public partial class MainViewModel : BaseViewModel
 
         try
         {
-            var result = await _gameService.LaunchGameAsync(game);
+            var result = await _gameService.LaunchGameAsync(game, onSaveConflict: onSaveConflict);
             if (result)
             {
                 StatusMessage = "游戏已启动，退出后将自动备份";

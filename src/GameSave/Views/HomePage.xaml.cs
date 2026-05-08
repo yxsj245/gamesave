@@ -773,7 +773,23 @@ namespace GameSave.Views
                         return;
                     }
 
-                    var (success, message) = await ViewModel.LaunchGameDirectAsync(game);
+                    var (success, message) = await ViewModel.LaunchGameDirectAsync(game,
+                        onSaveConflict: (report) =>
+                        {
+                            var tcs = new TaskCompletionSource<ConflictResolution>();
+                            this.DispatcherQueue.TryEnqueue(async () =>
+                            {
+                                try
+                                {
+                                    tcs.SetResult(await ShowSaveConflictDialogAsync(report));
+                                }
+                                catch (Exception ex)
+                                {
+                                    tcs.SetException(ex);
+                                }
+                            });
+                            return tcs.Task;
+                        });
                     if (success)
                     {
                         // 启动成功，隐藏到系统托盘并发送通知
@@ -2090,7 +2106,23 @@ namespace GameSave.Views
             }
 
             var gameName = ViewModel.SelectedGame.Name;
-            var (success, message) = await ViewModel.LaunchGameAsync();
+            var (success, message) = await ViewModel.LaunchGameAsync(
+                onSaveConflict: (report) =>
+                {
+                    var tcs = new TaskCompletionSource<ConflictResolution>();
+                    this.DispatcherQueue.TryEnqueue(async () =>
+                    {
+                        try
+                        {
+                            tcs.SetResult(await ShowSaveConflictDialogAsync(report));
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    });
+                    return tcs.Task;
+                });
             if (success)
             {
                 // 关闭详情面板，隐藏到系统托盘并发送通知
@@ -2574,6 +2606,178 @@ namespace GameSave.Views
             await dialog.ShowWithThemeAsync();
         }
 
+        private async Task<ConflictResolution> ShowSaveConflictDialogAsync(SaveConflictReport report)
+        {
+            var summaryPanel = new StackPanel { Spacing = 12 };
+
+            var summaryLines = new List<string>
+            {
+                $"游戏「{report.GameName}」的存档文件存在差异：",
+                "",
+                $"• 退出存档中有 {report.FileCountInExitSave} 个文件",
+                $"• 当前存档目录中有 {report.FileCountInCurrentSave} 个文件",
+                $"• 发现 {report.Conflicts.Count} 个冲突文件"
+            };
+            if (report.ModifiedCount > 0)
+                summaryLines.Add($"  └ 其中 {report.ModifiedCount} 个文件内容不同");
+            if (report.OnlyInExitSaveCount > 0)
+                summaryLines.Add($"  └ 仅存在于退出存档中的文件：{report.OnlyInExitSaveCount} 个");
+            if (report.OnlyInCurrentSaveCount > 0)
+                summaryLines.Add($"  └ 仅存在于当前存档中的文件：{report.OnlyInCurrentSaveCount} 个");
+
+            summaryPanel.Children.Add(new TextBlock
+            {
+                Text = string.Join("\n", summaryLines),
+                FontSize = 14,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var separator = new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Gray) { Opacity = 0.3 },
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+            summaryPanel.Children.Add(separator);
+
+            var headerText = new TextBlock
+            {
+                Text = "冲突文件详情：",
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Margin = new Thickness(0, 4, 0, 8)
+            };
+            summaryPanel.Children.Add(headerText);
+
+            var conflictsPanel = new StackPanel { Spacing = 6 };
+            var maxDisplay = Math.Min(report.Conflicts.Count, 50);
+            for (int i = 0; i < maxDisplay; i++)
+            {
+                var conflict = report.Conflicts[i];
+                var card = new Border
+                {
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Gray) { Opacity = 0.1 },
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(10, 6, 10, 6)
+                };
+
+                var cardStack = new StackPanel { Spacing = 2 };
+
+                var pathBlock = new TextBlock
+                {
+                    Text = conflict.RelativePath,
+                    FontSize = 12,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxLines = 2
+                };
+                cardStack.Children.Add(pathBlock);
+
+                if (conflict.ExitSaveSize == 0 && conflict.CurrentSaveSize > 0)
+                {
+                    cardStack.Children.Add(new TextBlock
+                    {
+                        Text = $"  ╰ 仅存在于当前存档（{conflict.DisplayCurrentSaveSize}，{conflict.DisplayCurrentSaveTime}）",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Microsoft.UI.Colors.LimeGreen),
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                }
+                else if (conflict.CurrentSaveSize == 0 && conflict.ExitSaveSize > 0)
+                {
+                    cardStack.Children.Add(new TextBlock
+                    {
+                        Text = $"  ╰ 仅存在于退出存档（{conflict.DisplayExitSaveSize}，{conflict.DisplayExitSaveTime}）",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Microsoft.UI.Colors.OrangeRed),
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                }
+                else
+                {
+                    var diffColor = conflict.IsNewerInCurrent
+                        ? Microsoft.UI.Colors.LimeGreen
+                        : Microsoft.UI.Colors.Orange;
+
+                    cardStack.Children.Add(new TextBlock
+                    {
+                        Text = $"  ╰ {conflict.DiffSummary}",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(diffColor),
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                    cardStack.Children.Add(new TextBlock
+                    {
+                        Text = $"     退出存档: {conflict.DisplayExitSaveTime} | {conflict.DisplayExitSaveSize}",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray)
+                    });
+                    cardStack.Children.Add(new TextBlock
+                    {
+                        Text = $"     当前存档: {conflict.DisplayCurrentSaveTime} | {conflict.DisplayCurrentSaveSize}",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Microsoft.UI.Colors.LightGray)
+                    });
+                }
+
+                card.Child = cardStack;
+                conflictsPanel.Children.Add(card);
+            }
+
+            if (report.Conflicts.Count > maxDisplay)
+            {
+                conflictsPanel.Children.Add(new TextBlock
+                {
+                    Text = $"... 还有 {report.Conflicts.Count - maxDisplay} 个冲突文件未显示",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+            }
+
+            var scrollViewer = new ScrollViewer
+            {
+                Content = conflictsPanel,
+                MaxHeight = 320,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
+            summaryPanel.Children.Add(scrollViewer);
+
+            var noteText = new TextBlock
+            {
+                Text = "\n请选择处理方式：\n" +
+                       "• 「覆盖退出存档」— 当前存档将作为下一次启动时的恢复基准\n" +
+                       "• 「重新备份」— 将当前存档内容备份为新的退出存档版本\n" +
+                       "• 「取消启动」— 不做任何操作，取消本次启动",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            summaryPanel.Children.Add(noteText);
+
+            var dialog = new ContentDialog
+            {
+                Title = "⚠️ 检测到存档文件冲突",
+                Content = summaryPanel,
+                PrimaryButtonText = "覆盖退出存档",
+                SecondaryButtonText = "重新备份",
+                CloseButtonText = "取消启动",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await dialog.ShowWithThemeAsync();
+
+            return result switch
+            {
+                ContentDialogResult.Primary => ConflictResolution.Overwrite,
+                ContentDialogResult.Secondary => ConflictResolution.Rebackup,
+                _ => ConflictResolution.Cancel
+            };
+        }
+
         #endregion
 
         #region 右键菜单
@@ -2606,7 +2810,23 @@ namespace GameSave.Views
 
             var gameName = game.Name;
             ViewModel.SelectedGame = game;
-            var (success, message) = await ViewModel.LaunchGameAsync();
+            var (success, message) = await ViewModel.LaunchGameAsync(
+                onSaveConflict: (report) =>
+                {
+                    var tcs = new TaskCompletionSource<ConflictResolution>();
+                    this.DispatcherQueue.TryEnqueue(async () =>
+                    {
+                        try
+                        {
+                            tcs.SetResult(await ShowSaveConflictDialogAsync(report));
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    });
+                    return tcs.Task;
+                });
             if (success)
             {
                 ViewModel.CloseDetails();

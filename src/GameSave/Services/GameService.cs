@@ -141,7 +141,8 @@ public class GameService
     /// <param name="game">要启动的游戏</param>
     /// <param name="onTarInvalid">tar 文件无效时的回调，返回 true 则继续启动</param>
     /// <returns>操作是否成功</returns>
-    public async Task<bool> LaunchGameAsync(Game game, Func<Task<bool>>? onTarInvalid = null)
+    public async Task<bool> LaunchGameAsync(Game game, Func<Task<bool>>? onTarInvalid = null,
+        Func<Models.SaveConflictReport, Task<Models.ConflictResolution>>? onSaveConflict = null)
     {
         // 验证启动方式
         if (game.LaunchViaSteam)
@@ -231,51 +232,116 @@ public class GameService
             }
             else
             {
-                // 清空所有存档目录
-                foreach (var savePath in game.ResolvedSaveFolderPaths)
+                // 存档冲突检测：对比退出存档与当前存档目录
+                bool skipRestore = false;
+                if (onSaveConflict != null)
                 {
-                    if (Directory.Exists(savePath))
+                    game.LaunchStatusMessage = "正在对比存档文件...";
+                    StatusChanged?.Invoke(this, new GameStatusInfo
                     {
-                        game.LaunchStatusMessage = "正在清空存档目录...";
+                        Status = GameRunStatus.Launching,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"正在对比 {game.Name} 的存档文件...",
+                        Progress = 45
+                    });
+
+                    var conflictReport = await SaveFileComparer.CompareAsync(
+                        latestExitSave.Path,
+                        game.SaveFolderPaths,
+                        game.Id,
+                        game.Name);
+
+                    if (conflictReport.HasConflict)
+                    {
+                        var resolution = await onSaveConflict(conflictReport);
+
+                        if (resolution == Models.ConflictResolution.Cancel)
+                        {
+                            game.LaunchStatusMessage = string.Empty;
+                            StatusChanged?.Invoke(this, new GameStatusInfo
+                            {
+                                Status = GameRunStatus.Idle,
+                                GameName = game.Name,
+                                GameId = game.Id,
+                                Message = "启动已取消（存档冲突）"
+                            });
+                            return false;
+                        }
+
+                        skipRestore = true;
+
+                        game.LaunchStatusMessage = "正在更新退出存档...";
                         StatusChanged?.Invoke(this, new GameStatusInfo
                         {
                             Status = GameRunStatus.Launching,
                             GameName = game.Name,
                             GameId = game.Id,
-                            Message = $"正在清空 {game.Name} 的存档目录...",
-                            Progress = 50
+                            Message = $"正在用当前存档更新 {game.Name} 的退出存档...",
+                            Progress = 55
                         });
-                        ClearDirectory(savePath);
-                    }
-                    else if (File.Exists(savePath))
-                    {
-                        // 单文件路径：直接删除文件
-                        File.Delete(savePath);
+
+                        await _localStorageService.CreateExitSaveAsync(game, useHotBackup: false);
+
+                        game.LaunchStatusMessage = "退出存档已更新，正在启动游戏...";
+                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        {
+                            Status = GameRunStatus.Launching,
+                            GameName = game.Name,
+                            GameId = game.Id,
+                            Message = $"{game.Name} 退出存档已更新，正在启动游戏...",
+                            Progress = 80
+                        });
                     }
                 }
 
-                // 解压存档
-                game.LaunchStatusMessage = "正在解压存档...";
-                StatusChanged?.Invoke(this, new GameStatusInfo
+                if (!skipRestore)
                 {
-                    Status = GameRunStatus.Launching,
-                    GameName = game.Name,
-                    GameId = game.Id,
-                    Message = $"正在解压存档到 {game.Name} 的存档目录...",
-                    Progress = 60
-                });
-                await TarHelper.ExtractTarToMultipleAsync(latestExitSave.Path, game.ResolvedSaveFolderPaths);
+                    // 清空所有存档目录
+                    foreach (var savePath in game.ResolvedSaveFolderPaths)
+                    {
+                        if (Directory.Exists(savePath))
+                        {
+                            game.LaunchStatusMessage = "正在清空存档目录...";
+                            StatusChanged?.Invoke(this, new GameStatusInfo
+                            {
+                                Status = GameRunStatus.Launching,
+                                GameName = game.Name,
+                                GameId = game.Id,
+                                Message = $"正在清空 {game.Name} 的存档目录...",
+                                Progress = 50
+                            });
+                            ClearDirectory(savePath);
+                        }
+                        else if (File.Exists(savePath))
+                        {
+                            File.Delete(savePath);
+                        }
+                    }
 
-                // 更新进度：解压完成
-                game.LaunchStatusMessage = "存档恢复完成，正在启动游戏...";
-                StatusChanged?.Invoke(this, new GameStatusInfo
-                {
-                    Status = GameRunStatus.Launching,
-                    GameName = game.Name,
-                    GameId = game.Id,
-                    Message = $"{game.Name} 存档恢复完成，正在启动游戏...",
-                    Progress = 80
-                });
+                    // 解压存档
+                    game.LaunchStatusMessage = "正在解压存档...";
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Launching,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"正在解压存档到 {game.Name} 的存档目录...",
+                        Progress = 60
+                    });
+                    await TarHelper.ExtractTarToMultipleAsync(latestExitSave.Path, game.ResolvedSaveFolderPaths);
+
+                    // 更新进度：解压完成
+                    game.LaunchStatusMessage = "存档恢复完成，正在启动游戏...";
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Launching,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = $"{game.Name} 存档恢复完成，正在启动游戏...",
+                        Progress = 80
+                    });
+                }
             }
         }
 
