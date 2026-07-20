@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace GameSave.Models;
 
 /// <summary>
@@ -20,7 +22,7 @@ public class CloudConfig
     /// <summary>用户名（WebDAV/FTP/SFTP 协议用）</summary>
     public string? Username { get; set; }
 
-    /// <summary>密码（WebDAV/FTP/SFTP 协议用，加密存储）</summary>
+    /// <summary>密码（WebDAV/FTP/SFTP 协议用，随配置文件保存）</summary>
     public string? Password { get; set; }
 
     /// <summary>远端存储根路径，默认 GameSave</summary>
@@ -42,6 +44,29 @@ public class CloudConfig
 
     /// <summary>阿里云 AccessKey Secret</summary>
     public string? AccessKeySecret { get; set; }
+
+    [JsonIgnore]
+    public string ProviderDisplayName => ProviderType switch
+    {
+        CloudProviderType.AliyunOss => "阿里云 OSS",
+        CloudProviderType.WebDav => "WebDAV",
+        CloudProviderType.Ftp => "FTP",
+        CloudProviderType.Sftp => "SFTP",
+        CloudProviderType.LocalFolder => "本地文件夹",
+        _ => ProviderType.ToString()
+    };
+
+    [JsonIgnore]
+    public string ProviderSummary => ProviderType switch
+    {
+        CloudProviderType.AliyunOss => string.IsNullOrWhiteSpace(BucketName)
+            ? "阿里云 OSS"
+            : $"阿里云 OSS · {BucketName}",
+        CloudProviderType.WebDav => string.IsNullOrWhiteSpace(ServerUrl)
+            ? "WebDAV"
+            : $"WebDAV · {ServerUrl}",
+        _ => ProviderDisplayName
+    };
 }
 
 /// <summary>云存储提供商类型</summary>

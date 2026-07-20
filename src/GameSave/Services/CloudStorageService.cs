@@ -5,7 +5,7 @@ namespace GameSave.Services;
 
 /// <summary>
 /// 云端存储服务
-/// 基于 CloudConfig 配置，当前支持阿里云 OSS 后端
+/// 基于 CloudConfig 配置，支持阿里云 OSS 和通用 WebDAV 后端
 /// 实现 IStorageService 接口，并提供上传/下载/测试连接等扩展方法
 /// </summary>
 public class CloudStorageService : IStorageService
@@ -322,12 +322,14 @@ public class CloudStorageService : IStorageService
     /// <summary>
     /// 创建底层存储提供者实例
     /// </summary>
-    private OssStorageProvider CreateProvider()
+    private ICloudObjectStorageProvider CreateProvider()
     {
-        if (_config.ProviderType != CloudProviderType.AliyunOss)
-            throw new NotSupportedException($"暂不支持 {_config.ProviderType} 云存储类型，当前仅支持阿里云 OSS");
-
-        return new OssStorageProvider(_config);
+        return _config.ProviderType switch
+        {
+            CloudProviderType.AliyunOss => new OssStorageProvider(_config),
+            CloudProviderType.WebDav => new WebDavStorageProvider(_config),
+            _ => throw new NotSupportedException($"暂不支持 {_config.ProviderType} 云存储类型")
+        };
     }
 
     /// <summary>

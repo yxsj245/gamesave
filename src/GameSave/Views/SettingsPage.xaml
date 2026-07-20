@@ -148,7 +148,62 @@
                         <!-- 已有配置列表 -->
                         <ListView x:Name="CloudConfigListView"
                                   ItemsSource="{x:Bind ViewModel.CloudConfigs, Mode=OneWay}"
-                                  SelectionMode="None">
+                                  SelectionMode="None"
+                                  Padding="0">
+                            <ListView.Resources>
+                                <ResourceDictionary>
+                                    <ResourceDictionary.ThemeDictionaries>
+                                        <ResourceDictionary x:Key="Light">
+                                            <SolidColorBrush x:Key="ListViewItemBackground" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#0A000000"/>
+                                            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#14000000"/>
+                                            <SolidColorBrush x:Key="ButtonBackground" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#14000000"/>
+                                            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#21000000"/>
+                                            <SolidColorBrush x:Key="ButtonForeground" Color="#99000000"/>
+                                            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#005FB8"/>
+                                            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#004578"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                                        </ResourceDictionary>
+                                        <ResourceDictionary x:Key="Dark">
+                                            <SolidColorBrush x:Key="ListViewItemBackground" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#12FFFFFF"/>
+                                            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#1FFFFFFF"/>
+                                            <SolidColorBrush x:Key="ButtonBackground" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1AFFFFFF"/>
+                                            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#2AFFFFFF"/>
+                                            <SolidColorBrush x:Key="ButtonForeground" Color="#B3FFFFFF"/>
+                                            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#7DBBFF"/>
+                                            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#A6D1FF"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                                        </ResourceDictionary>
+                                    </ResourceDictionary.ThemeDictionaries>
+
+                                    <Style x:Key="CloudConfigActionButtonStyle" TargetType="Button">
+                                        <Setter Property="Width" Value="32"/>
+                                        <Setter Property="Height" Value="32"/>
+                                        <Setter Property="MinWidth" Value="32"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="CornerRadius" Value="4"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                    </Style>
+                                </ResourceDictionary>
+                            </ListView.Resources>
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0,0,0,8"/>
+                                    <Setter Property="MinHeight" Value="0"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="UseSystemFocusVisuals" Value="False"/>
+                                </Style>
+                            </ListView.ItemContainerStyle>
                             <ListView.ItemContainerTransitions>
                                 <TransitionCollection>
                                     <EntranceThemeTransition IsStaggeringEnabled="True"/>
@@ -156,37 +211,49 @@
                             </ListView.ItemContainerTransitions>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Padding="8,12" Margin="0,2">
+                                    <Border MinHeight="64"
+                                            CornerRadius="8"
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <Grid Margin="12,10">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- 图标 -->
-                                        <FontIcon Grid.Column="0" Glyph="&#xE753;" 
-                                                  FontSize="24" Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                                                  VerticalAlignment="Center" Margin="0,0,12,0"/>
-
                                         <!-- 配置信息 -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                             <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold"/>
-                                            <TextBlock FontSize="12" Foreground="Gray">
-                                                <Run Text="阿里云 OSS · "/>
-                                                <Run Text="{Binding BucketName}"/>
-                                            </TextBlock>
+                                            <TextBlock Text="{Binding ProviderSummary}"
+                                                       FontSize="12"
+                                                       Foreground="Gray"
+                                                       TextWrapping="WrapWholeWords"
+                                                       MaxLines="2"/>
                                         </StackPanel>
 
-                                        <!-- 删除按钮 -->
-                                        <Button Grid.Column="2" 
-                                                VerticalAlignment="Center"
-                                                Click="DeleteCloudConfig_Click"
-                                                Tag="{Binding}"
-                                                Background="Transparent"
-                                                BorderThickness="0">
-                                            <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="Gray"/>
-                                        </Button>
+                                        <!-- 操作按钮 -->
+                                        <StackPanel Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    Spacing="4"
+                                                    VerticalAlignment="Center">
+                                            <Button VerticalAlignment="Center"
+                                                    Click="EditCloudConfig_Click"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource CloudConfigActionButtonStyle}"
+                                                    ToolTipService.ToolTip="编辑">
+                                                <FontIcon Glyph="&#xE70F;" FontSize="14"/>
+                                            </Button>
+                                            <Button VerticalAlignment="Center"
+                                                    Click="DeleteCloudConfig_Click"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource CloudConfigActionButtonStyle}"
+                                                    ToolTipService.ToolTip="删除">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>

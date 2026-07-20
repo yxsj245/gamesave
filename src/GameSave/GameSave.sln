@@ -5,6 +5,8 @@ VisualStudioVersion = 17.5.33103.201
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{B63948AB-1386-4A0E-82CF-983060F765A6}") = "GameSave", "GameSave.csproj", "{CD177887-5F23-4D6F-8633-912E4F2D0ADE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSave.Tests", "..\..\tests\GameSave.Tests\GameSave.Tests.csproj", "{8F78C668-6684-4CA8-BA05-62472D5F22D6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -33,6 +35,18 @@ Global
 		{CD177887-5F23-4D6F-8633-912E4F2D0ADE}.Release|x86.ActiveCfg = Release|x86
 		{CD177887-5F23-4D6F-8633-912E4F2D0ADE}.Release|x86.Build.0 = Release|x86
 		{CD177887-5F23-4D6F-8633-912E4F2D0ADE}.Release|x86.Deploy.0 = Release|x86
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|ARM64.Build.0 = Debug|ARM64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|x64.ActiveCfg = Debug|x64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|x64.Build.0 = Debug|x64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|x86.ActiveCfg = Debug|x86
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Debug|x86.Build.0 = Debug|x86
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|ARM64.ActiveCfg = Release|ARM64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|ARM64.Build.0 = Release|ARM64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|x64.ActiveCfg = Release|x64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|x64.Build.0 = Release|x64
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|x86.ActiveCfg = Release|x86
+		{8F78C668-6684-4CA8-BA05-62472D5F22D6}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

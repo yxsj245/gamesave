@@ -8,7 +8,7 @@ namespace GameSave.Services;
 /// 阿里云 OSS 存储操作封装
 /// 提供文件上传、下载、列表查询、删除和连接测试等基础操作
 /// </summary>
-public class OssStorageProvider : IDisposable
+public class OssStorageProvider : ICloudObjectStorageProvider
 {
     private readonly OssClient _client;
     private readonly string _bucketName;
@@ -114,11 +114,11 @@ public class OssStorageProvider : IDisposable
     /// </summary>
     /// <param name="prefix">前缀（不含 basePath，如 gameId/）</param>
     /// <returns>对象信息列表（Key 已去除 basePath 前缀）</returns>
-    public Task<List<OssObjectInfo>> ListObjectsAsync(string prefix = "")
+    public Task<List<CloudObjectInfo>> ListObjectsAsync(string prefix = "")
     {
         return Task.Run(() =>
         {
-            var results = new List<OssObjectInfo>();
+            var results = new List<CloudObjectInfo>();
             var fullPrefix = _basePath + prefix;
             string? nextMarker = null;
 
@@ -139,7 +139,7 @@ public class OssStorageProvider : IDisposable
                     if (summary.Key.EndsWith("/") && summary.Size == 0)
                         continue;
 
-                    results.Add(new OssObjectInfo
+                    results.Add(new CloudObjectInfo
                     {
                         Key = summary.Key.StartsWith(_basePath)
                             ? summary.Key[_basePath.Length..]
@@ -325,22 +325,4 @@ public class ProgressStream : Stream
     }
 
     public override void Write(byte[] buffer, int offset, int count) => _base.Write(buffer, offset, count);
-}
-
-/// <summary>
-/// OSS 对象信息（简化模型）
-/// </summary>
-public class OssObjectInfo
-{
-    /// <summary>相对键（已去除 basePath 前缀）</summary>
-    public string Key { get; set; } = string.Empty;
-
-    /// <summary>完整的 OSS 对象键</summary>
-    public string FullKey { get; set; } = string.Empty;
-
-    /// <summary>文件大小（字节）</summary>
-    public long Size { get; set; }
-
-    /// <summary>最后修改时间</summary>
-    public DateTime LastModified { get; set; }
 }

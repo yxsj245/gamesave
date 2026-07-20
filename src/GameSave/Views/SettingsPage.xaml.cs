@@ -93,6 +93,186 @@ namespace GameSave.Views
                 : Microsoft.UI.Xaml.Visibility.Collapsed;
         }
 
+        private const string PasswordRevealIconFontFamily = "Segoe MDL2 Assets";
+        private const string PasswordRevealGlyph = "\uE890";
+
+        private static string GetPasswordRevealGlyph(bool isPasswordVisible) =>
+            PasswordRevealGlyph;
+
+        private static string GetPasswordRevealIconFontFamily() => PasswordRevealIconFontFamily;
+
+        private static double GetPasswordRevealIconSize() => 12d;
+
+        private static double GetPasswordRevealButtonWidth() => 24d;
+
+        private static double GetPasswordRevealButtonHeight() => 24d;
+
+        private static Microsoft.UI.Xaml.Thickness GetPasswordRevealInputPadding() =>
+            new(12, 5, 34, 5);
+
+        private static double GetPasswordRevealIconOpacity(bool isPasswordVisible) =>
+            isPasswordVisible ? 1d : 0.68d;
+
+        private static string GetPasswordRevealButtonBackgroundResourceKey() =>
+            "TextControlBackgroundFocused";
+
+        private static Microsoft.UI.Xaml.Media.Brush GetPasswordRevealButtonBackground()
+        {
+            if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(
+                    GetPasswordRevealButtonBackgroundResourceKey(),
+                    out var resource)
+                && resource is Microsoft.UI.Xaml.Media.Brush brush)
+            {
+                return brush;
+            }
+
+            return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        }
+
+        private static Microsoft.UI.Xaml.Media.Brush GetPasswordRevealIconForeground(bool isPasswordVisible)
+        {
+            var resourceKey = isPasswordVisible
+                ? "AccentFillColorDefaultBrush"
+                : "TextFillColorSecondaryBrush";
+
+            if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(resourceKey, out var resource)
+                && resource is Microsoft.UI.Xaml.Media.Brush brush)
+            {
+                return brush;
+            }
+
+            return new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                isPasswordVisible ? Microsoft.UI.Colors.DodgerBlue : Microsoft.UI.Colors.Gray);
+        }
+
+        private static void UpdatePasswordRevealIconVisual(FontIcon revealIcon, bool isPasswordVisible)
+        {
+            revealIcon.Glyph = GetPasswordRevealGlyph(isPasswordVisible);
+            revealIcon.Opacity = GetPasswordRevealIconOpacity(isPasswordVisible);
+            revealIcon.Foreground = GetPasswordRevealIconForeground(isPasswordVisible);
+        }
+
+        private static FontIcon CreatePasswordRevealIcon()
+        {
+            var revealIcon = new FontIcon
+            {
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(GetPasswordRevealIconFontFamily()),
+                FontSize = GetPasswordRevealIconSize(),
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center
+            };
+            UpdatePasswordRevealIconVisual(revealIcon, false);
+            return revealIcon;
+        }
+
+        private static (PasswordBox passwordBox, FrameworkElement control) CreateRevealablePasswordInput(
+            string header,
+            string placeholder,
+            string initialPassword)
+        {
+            var container = new StackPanel { Spacing = 4 };
+            container.Children.Add(new TextBlock
+            {
+                Text = header,
+                FontSize = 14
+            });
+
+            var inputGrid = new Grid();
+
+            var passwordBox = new PasswordBox
+            {
+                PlaceholderText = placeholder,
+                Password = initialPassword,
+                PasswordRevealMode = PasswordRevealMode.Hidden,
+                Padding = GetPasswordRevealInputPadding()
+            };
+
+            var visibleBox = new TextBox
+            {
+                PlaceholderText = placeholder,
+                Text = initialPassword,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed,
+                Padding = GetPasswordRevealInputPadding()
+            };
+
+            var revealIcon = CreatePasswordRevealIcon();
+            var revealButtonBackground = GetPasswordRevealButtonBackground();
+
+            var revealButton = new Button
+            {
+                Width = GetPasswordRevealButtonWidth(),
+                MinWidth = GetPasswordRevealButtonWidth(),
+                Height = GetPasswordRevealButtonHeight(),
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Right,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 4, 0),
+                Padding = new Microsoft.UI.Xaml.Thickness(0),
+                BorderThickness = new Microsoft.UI.Xaml.Thickness(0),
+                UseSystemFocusVisuals = false,
+                Background = revealButtonBackground,
+                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                Content = revealIcon
+            };
+            revealButton.Resources["ButtonBackground"] = revealButtonBackground;
+            revealButton.Resources["ButtonBackgroundPointerOver"] = revealButtonBackground;
+            revealButton.Resources["ButtonBackgroundPressed"] = revealButtonBackground;
+            revealButton.Resources["ButtonBackgroundDisabled"] = revealButtonBackground;
+            revealButton.Resources["ButtonBorderBrush"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            revealButton.Resources["ButtonBorderBrushPointerOver"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            revealButton.Resources["ButtonBorderBrushPressed"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            ToolTipService.SetToolTip(revealButton, "显示密码");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(revealButton, "显示密码");
+
+            inputGrid.Children.Add(passwordBox);
+            inputGrid.Children.Add(visibleBox);
+            inputGrid.Children.Add(revealButton);
+
+            var syncing = false;
+            var isPasswordVisible = false;
+            passwordBox.PasswordChanged += (_, _) =>
+            {
+                if (syncing) return;
+                syncing = true;
+                visibleBox.Text = passwordBox.Password;
+                syncing = false;
+            };
+
+            visibleBox.TextChanged += (_, _) =>
+            {
+                if (syncing) return;
+                syncing = true;
+                passwordBox.Password = visibleBox.Text;
+                syncing = false;
+            };
+
+            revealButton.Click += (_, _) =>
+            {
+                isPasswordVisible = !isPasswordVisible;
+                UpdatePasswordRevealIconVisual(revealIcon, isPasswordVisible);
+                if (isPasswordVisible)
+                {
+                    visibleBox.Text = passwordBox.Password;
+                    passwordBox.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    visibleBox.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(revealButton, "隐藏密码");
+                    ToolTipService.SetToolTip(revealButton, "隐藏密码");
+                    visibleBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+                }
+                else
+                {
+                    passwordBox.Password = visibleBox.Text;
+                    visibleBox.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                    passwordBox.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(revealButton, "显示密码");
+                    ToolTipService.SetToolTip(revealButton, "显示密码");
+                    passwordBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+                }
+            };
+
+            container.Children.Add(inputGrid);
+            return (passwordBox, container);
+        }
+
         private async void ChangeWorkDir_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
             // 双重保险：如果工作目录被启动参数锁定，不允许更改
@@ -206,54 +386,113 @@ namespace GameSave.Views
         private async void AddCloudConfig_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
             ViewModel.ResetCloudConfigForm();
+            await ShowCloudConfigDialogAsync();
+        }
 
+        private async Task ShowCloudConfigDialogAsync()
+        {
             // 构建表单内容
             var formPanel = new StackPanel { Spacing = 12, MinWidth = 400 };
 
             var nameBox = new TextBox
             {
                 Header = "配置名称",
-                PlaceholderText = "例如: 我的阿里云OSS"
+                PlaceholderText = "例如: 我的阿里云OSS",
+                Text = ViewModel.NewDisplayName
             };
 
-            var providerInfo = new TextBlock
+            var providerCombo = new ComboBox
             {
-                Text = "服务商: 阿里云 OSS",
-                FontSize = 13,
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gray),
-                Margin = new Microsoft.UI.Xaml.Thickness(0, 4, 0, 0)
+                Header = "服务商",
+                SelectedIndex = ViewModel.NewProviderType == CloudProviderType.WebDav ? 1 : 0,
+                MinWidth = 220
             };
+            providerCombo.Items.Add("阿里云 OSS");
+            providerCombo.Items.Add("WebDAV");
 
             var endpointBox = new TextBox
             {
                 Header = "Endpoint",
-                PlaceholderText = "例如: oss-cn-hangzhou.aliyuncs.com"
+                PlaceholderText = "例如: oss-cn-hangzhou.aliyuncs.com",
+                Text = ViewModel.NewEndpoint
             };
 
             var bucketBox = new TextBox
             {
                 Header = "Bucket 名称",
-                PlaceholderText = "存储桶名称"
+                PlaceholderText = "存储桶名称",
+                Text = ViewModel.NewBucketName
             };
 
             var akIdBox = new TextBox
             {
                 Header = "AccessKey ID",
-                PlaceholderText = "阿里云 AccessKey ID"
+                PlaceholderText = "阿里云 AccessKey ID",
+                Text = ViewModel.NewAccessKeyId
             };
 
-            var akSecretBox = new PasswordBox
-            {
-                Header = "AccessKey Secret",
-                PlaceholderText = "阿里云 AccessKey Secret"
-            };
+            var (akSecretBox, akSecretInput) = CreateRevealablePasswordInput(
+                "AccessKey Secret",
+                "阿里云 AccessKey Secret",
+                ViewModel.NewAccessKeySecret);
 
             var basePathBox = new TextBox
             {
                 Header = "远端存储路径",
                 PlaceholderText = "默认: GameSave",
-                Text = "GameSave"
+                Text = ViewModel.NewRemoteBasePath
             };
+
+            var serverUrlBox = new TextBox
+            {
+                Header = "WebDAV 服务器地址",
+                PlaceholderText = "例如: https://192.168.1.99:5006",
+                Text = ViewModel.NewServerUrl
+            };
+
+            var usernameBox = new TextBox
+            {
+                Header = "用户名",
+                PlaceholderText = "WebDAV 用户名",
+                Text = ViewModel.NewUsername
+            };
+
+            var (passwordBox, passwordInput) = CreateRevealablePasswordInput(
+                "密码",
+                "WebDAV 密码",
+                ViewModel.NewPassword);
+
+            var ossFields = new StackPanel { Spacing = 12 };
+            ossFields.Children.Add(endpointBox);
+            ossFields.Children.Add(bucketBox);
+            ossFields.Children.Add(akIdBox);
+            ossFields.Children.Add(akSecretInput);
+
+            var webDavFields = new StackPanel
+            {
+                Spacing = 12,
+                Visibility = Microsoft.UI.Xaml.Visibility.Collapsed
+            };
+            webDavFields.Children.Add(serverUrlBox);
+            webDavFields.Children.Add(usernameBox);
+            webDavFields.Children.Add(passwordInput);
+
+            void ApplyProviderSelection()
+            {
+                bool isWebDav = providerCombo.SelectedIndex == 1;
+                ossFields.Visibility = isWebDav
+                    ? Microsoft.UI.Xaml.Visibility.Collapsed
+                    : Microsoft.UI.Xaml.Visibility.Visible;
+                webDavFields.Visibility = isWebDav
+                    ? Microsoft.UI.Xaml.Visibility.Visible
+                    : Microsoft.UI.Xaml.Visibility.Collapsed;
+                basePathBox.PlaceholderText = "默认: GameSave";
+
+                if (string.IsNullOrWhiteSpace(basePathBox.Text))
+                    basePathBox.Text = "GameSave";
+            }
+
+            providerCombo.SelectionChanged += (_, _) => ApplyProviderSelection();
 
             var testResultText = new TextBlock
             {
@@ -272,11 +511,17 @@ namespace GameSave.Views
             testBtn.Click += async (s, _) =>
             {
                 // 同步更新 ViewModel 数据
+                ViewModel.NewProviderType = providerCombo.SelectedIndex == 1
+                    ? CloudProviderType.WebDav
+                    : CloudProviderType.AliyunOss;
                 ViewModel.NewDisplayName = nameBox.Text;
                 ViewModel.NewEndpoint = endpointBox.Text;
                 ViewModel.NewBucketName = bucketBox.Text;
                 ViewModel.NewAccessKeyId = akIdBox.Text;
                 ViewModel.NewAccessKeySecret = akSecretBox.Password;
+                ViewModel.NewServerUrl = serverUrlBox.Text;
+                ViewModel.NewUsername = usernameBox.Text;
+                ViewModel.NewPassword = passwordBox.Password;
                 ViewModel.NewRemoteBasePath = basePathBox.Text;
 
                 testResultText.Text = "⏳ 正在测试连接...";
@@ -293,14 +538,13 @@ namespace GameSave.Views
             };
 
             formPanel.Children.Add(nameBox);
-            formPanel.Children.Add(providerInfo);
-            formPanel.Children.Add(endpointBox);
-            formPanel.Children.Add(bucketBox);
-            formPanel.Children.Add(akIdBox);
-            formPanel.Children.Add(akSecretBox);
+            formPanel.Children.Add(providerCombo);
+            formPanel.Children.Add(ossFields);
+            formPanel.Children.Add(webDavFields);
             formPanel.Children.Add(basePathBox);
             formPanel.Children.Add(testBtn);
             formPanel.Children.Add(testResultText);
+            ApplyProviderSelection();
 
             var scrollViewer = new ScrollViewer
             {
@@ -313,8 +557,8 @@ namespace GameSave.Views
             {
                 var dialog = new ContentDialog
                 {
-                    Title = "添加云端存储配置",
-                    PrimaryButtonText = "添加",
+                    Title = ViewModel.IsEditingCloudConfig ? "编辑云端存储配置" : "添加云端存储配置",
+                    PrimaryButtonText = ViewModel.IsEditingCloudConfig ? "保存" : "添加",
                     CloseButtonText = "取消",
                     DefaultButton = ContentDialogButton.Primary,
                     XamlRoot = this.XamlRoot,
@@ -327,23 +571,41 @@ namespace GameSave.Views
                     break; // 用户取消
 
                 // 同步表单数据到 ViewModel
+                ViewModel.NewProviderType = providerCombo.SelectedIndex == 1
+                    ? CloudProviderType.WebDav
+                    : CloudProviderType.AliyunOss;
                 ViewModel.NewDisplayName = nameBox.Text;
                 ViewModel.NewEndpoint = endpointBox.Text;
                 ViewModel.NewBucketName = bucketBox.Text;
                 ViewModel.NewAccessKeyId = akIdBox.Text;
                 ViewModel.NewAccessKeySecret = akSecretBox.Password;
+                ViewModel.NewServerUrl = serverUrlBox.Text;
+                ViewModel.NewUsername = usernameBox.Text;
+                ViewModel.NewPassword = passwordBox.Password;
                 ViewModel.NewRemoteBasePath = basePathBox.Text;
 
-                var (success, message) = await ViewModel.AddCloudConfigAsync();
+                var (success, message) = await ViewModel.SaveCloudConfigAsync();
                 if (success)
                 {
                     UpdateNoConfigHint();
-                    break; // 添加成功，退出循环
+                    break; // 保存成功，退出循环
                 }
 
                 // 验证失败，显示错误信息并重新弹出
                 testResultText.Text = $"❌ {message}";
                 testResultText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed);
+            }
+        }
+
+        /// <summary>
+        /// 编辑云端配置
+        /// </summary>
+        private async void EditCloudConfig_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is CloudConfig config)
+            {
+                ViewModel.BeginEditCloudConfig(config);
+                await ShowCloudConfigDialogAsync();
             }
         }
 
