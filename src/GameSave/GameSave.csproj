@@ -26,6 +26,8 @@
         <!-- App Options -->
         <UseRidGraph>true</UseRidGraph>
         <Platforms>x86;x64;ARM64</Platforms>
+        <!-- WindowsAppSDKSelfContained 需要明确的 Windows 架构，未指定时默认使用 x64 -->
+        <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets\app.ico</ApplicationIcon>
         <!-- 禁用 WinUI 自动生成的 Main 方法，使用 Program.cs 中的自定义入口点 -->
