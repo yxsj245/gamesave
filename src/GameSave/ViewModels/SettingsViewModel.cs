@@ -18,9 +18,14 @@ public partial class SettingsViewModel : BaseViewModel
     public string AppVersion { get; } = AppVersionHelper.GetVersion();
 
     public SettingsViewModel()
+        : this(App.ConfigService)
+    {
+    }
+
+    public SettingsViewModel(ConfigService configService)
     {
         Title = "设置";
-        _configService = App.ConfigService;
+        _configService = configService;
     }
 
     #region 外观设置（主题）
@@ -204,6 +209,13 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     // 添加云配置的表单字段
+    private CloudProviderType _newProviderType = CloudProviderType.AliyunOss;
+    public CloudProviderType NewProviderType
+    {
+        get => _newProviderType;
+        set => SetProperty(ref _newProviderType, value);
+    }
+
     private string _newDisplayName = string.Empty;
     public string NewDisplayName
     {
@@ -246,6 +258,36 @@ public partial class SettingsViewModel : BaseViewModel
         set => SetProperty(ref _newRemoteBasePath, value);
     }
 
+    private string _newServerUrl = string.Empty;
+    public string NewServerUrl
+    {
+        get => _newServerUrl;
+        set => SetProperty(ref _newServerUrl, value);
+    }
+
+    private string _newUsername = string.Empty;
+    public string NewUsername
+    {
+        get => _newUsername;
+        set => SetProperty(ref _newUsername, value);
+    }
+
+    private string _newPassword = string.Empty;
+    public string NewPassword
+    {
+        get => _newPassword;
+        set => SetProperty(ref _newPassword, value);
+    }
+
+    private CloudConfig? _editingCloudConfig;
+
+    private bool _isEditingCloudConfig;
+    public bool IsEditingCloudConfig
+    {
+        get => _isEditingCloudConfig;
+        set => SetProperty(ref _isEditingCloudConfig, value);
+    }
+
     private string _testResult = string.Empty;
     public string TestResult
     {
@@ -277,12 +319,40 @@ public partial class SettingsViewModel : BaseViewModel
     /// </summary>
     public void ResetCloudConfigForm()
     {
+        _editingCloudConfig = null;
+        IsEditingCloudConfig = false;
+        NewProviderType = CloudProviderType.AliyunOss;
         NewDisplayName = string.Empty;
         NewEndpoint = string.Empty;
         NewBucketName = string.Empty;
         NewAccessKeyId = string.Empty;
         NewAccessKeySecret = string.Empty;
+        NewServerUrl = string.Empty;
+        NewUsername = string.Empty;
+        NewPassword = string.Empty;
         NewRemoteBasePath = "GameSave";
+        TestResult = string.Empty;
+    }
+
+    /// <summary>
+    /// 进入云端配置编辑模式，并把已有配置回填到表单字段。
+    /// </summary>
+    public void BeginEditCloudConfig(CloudConfig config)
+    {
+        _editingCloudConfig = config;
+        IsEditingCloudConfig = true;
+        NewProviderType = config.ProviderType;
+        NewDisplayName = config.DisplayName;
+        NewEndpoint = config.Endpoint ?? string.Empty;
+        NewBucketName = config.BucketName ?? string.Empty;
+        NewAccessKeyId = config.AccessKeyId ?? string.Empty;
+        NewAccessKeySecret = config.AccessKeySecret ?? string.Empty;
+        NewServerUrl = config.ServerUrl ?? string.Empty;
+        NewUsername = config.Username ?? string.Empty;
+        NewPassword = config.Password ?? string.Empty;
+        NewRemoteBasePath = string.IsNullOrWhiteSpace(config.RemoteBasePath)
+            ? GetDefaultRemoteBasePath(config.ProviderType)
+            : config.RemoteBasePath;
         TestResult = string.Empty;
     }
 
@@ -293,22 +363,39 @@ public partial class SettingsViewModel : BaseViewModel
     {
         if (string.IsNullOrWhiteSpace(NewDisplayName))
             return (false, "请输入配置名称");
-        if (string.IsNullOrWhiteSpace(NewEndpoint))
-            return (false, "请输入 OSS Endpoint");
-        if (string.IsNullOrWhiteSpace(NewBucketName))
-            return (false, "请输入 Bucket 名称");
-        if (string.IsNullOrWhiteSpace(NewAccessKeyId))
-            return (false, "请输入 AccessKey ID");
-        if (string.IsNullOrWhiteSpace(NewAccessKeySecret))
-            return (false, "请输入 AccessKey Secret");
+
+        if (NewProviderType == CloudProviderType.AliyunOss)
+        {
+            if (string.IsNullOrWhiteSpace(NewEndpoint))
+                return (false, "请输入 OSS Endpoint");
+            if (string.IsNullOrWhiteSpace(NewBucketName))
+                return (false, "请输入 Bucket 名称");
+            if (string.IsNullOrWhiteSpace(NewAccessKeyId))
+                return (false, "请输入 AccessKey ID");
+            if (string.IsNullOrWhiteSpace(NewAccessKeySecret))
+                return (false, "请输入 AccessKey Secret");
+        }
+        else if (NewProviderType == CloudProviderType.WebDav)
+        {
+            if (string.IsNullOrWhiteSpace(NewServerUrl))
+                return (false, "请输入 WebDAV 服务器地址");
+            if (string.IsNullOrWhiteSpace(NewUsername))
+                return (false, "请输入 WebDAV 用户名");
+            if (string.IsNullOrWhiteSpace(NewPassword))
+                return (false, "请输入 WebDAV 密码");
+        }
+        else
+        {
+            return (false, $"暂不支持 {NewProviderType} 云存储类型");
+        }
 
         return (true, string.Empty);
     }
 
     /// <summary>
-    /// 添加云端配置
+    /// 保存云端配置。新增模式下添加配置，编辑模式下更新原配置。
     /// </summary>
-    public async Task<(bool success, string message)> AddCloudConfigAsync()
+    public async Task<(bool success, string message)> SaveCloudConfigAsync()
     {
         var (valid, validMsg) = ValidateCloudConfigForm();
         if (!valid)
@@ -316,18 +403,22 @@ public partial class SettingsViewModel : BaseViewModel
 
         try
         {
-            var config = new CloudConfig
+            var editingConfig = _editingCloudConfig;
+            var config = CreateCloudConfigFromForm(editingConfig);
+
+            if (editingConfig != null)
             {
-                DisplayName = NewDisplayName.Trim(),
-                ProviderType = CloudProviderType.AliyunOss,
-                Endpoint = NewEndpoint.Trim(),
-                BucketName = NewBucketName.Trim(),
-                AccessKeyId = NewAccessKeyId.Trim(),
-                AccessKeySecret = NewAccessKeySecret.Trim(),
-                RemoteBasePath = string.IsNullOrWhiteSpace(NewRemoteBasePath)
-                    ? "GameSave"
-                    : NewRemoteBasePath.Trim()
-            };
+                await _configService.UpdateCloudConfigAsync(config);
+
+                var index = CloudConfigs.IndexOf(editingConfig);
+                if (index >= 0)
+                    CloudConfigs[index] = config;
+                else
+                    LoadCloudConfigs();
+
+                ResetCloudConfigForm();
+                return (true, $"云端配置 \"{config.DisplayName}\" 保存成功");
+            }
 
             await _configService.AddCloudConfigAsync(config);
             CloudConfigs.Add(config);
@@ -339,6 +430,36 @@ public partial class SettingsViewModel : BaseViewModel
         {
             return (false, $"添加失败: {ex.Message}");
         }
+    }
+
+    private CloudConfig CreateCloudConfigFromForm(CloudConfig? existingConfig = null)
+    {
+        var config = new CloudConfig
+        {
+            Id = existingConfig?.Id ?? Guid.NewGuid().ToString(),
+            DisplayName = NewDisplayName.Trim(),
+            ProviderType = NewProviderType,
+            RemoteBasePath = string.IsNullOrWhiteSpace(NewRemoteBasePath)
+                ? GetDefaultRemoteBasePath(NewProviderType)
+                : NewRemoteBasePath.Trim(),
+            IsEnabled = existingConfig?.IsEnabled ?? true
+        };
+
+        if (NewProviderType == CloudProviderType.AliyunOss)
+        {
+            config.Endpoint = NewEndpoint.Trim();
+            config.BucketName = NewBucketName.Trim();
+            config.AccessKeyId = NewAccessKeyId.Trim();
+            config.AccessKeySecret = NewAccessKeySecret.Trim();
+        }
+        else if (NewProviderType == CloudProviderType.WebDav)
+        {
+            config.ServerUrl = NewServerUrl.Trim();
+            config.Username = NewUsername.Trim();
+            config.Password = NewPassword;
+        }
+
+        return config;
     }
 
     /// <summary>
@@ -377,15 +498,25 @@ public partial class SettingsViewModel : BaseViewModel
         {
             var config = new CloudConfig
             {
-                ProviderType = CloudProviderType.AliyunOss,
-                Endpoint = NewEndpoint.Trim(),
-                BucketName = NewBucketName.Trim(),
-                AccessKeyId = NewAccessKeyId.Trim(),
-                AccessKeySecret = NewAccessKeySecret.Trim(),
+                ProviderType = NewProviderType,
                 RemoteBasePath = string.IsNullOrWhiteSpace(NewRemoteBasePath)
-                    ? "GameSave"
+                    ? GetDefaultRemoteBasePath(NewProviderType)
                     : NewRemoteBasePath.Trim()
             };
+
+            if (NewProviderType == CloudProviderType.AliyunOss)
+            {
+                config.Endpoint = NewEndpoint.Trim();
+                config.BucketName = NewBucketName.Trim();
+                config.AccessKeyId = NewAccessKeyId.Trim();
+                config.AccessKeySecret = NewAccessKeySecret.Trim();
+            }
+            else if (NewProviderType == CloudProviderType.WebDav)
+            {
+                config.ServerUrl = NewServerUrl.Trim();
+                config.Username = NewUsername.Trim();
+                config.Password = NewPassword;
+            }
 
             var cloudService = new CloudStorageService(config, _configService);
             var (success, message) = await cloudService.TestConnectionAsync();
@@ -400,6 +531,12 @@ public partial class SettingsViewModel : BaseViewModel
             IsTesting = false;
         }
     }
+
+    public static string GetDefaultRemoteBasePath(CloudProviderType providerType) => providerType switch
+    {
+        CloudProviderType.WebDav => "GameSave",
+        _ => "GameSave"
+    };
 
     #endregion
 

@@ -75,7 +75,7 @@
                     Visibility="Collapsed">
             <FontIcon Glyph="&#xE753;" FontSize="64" Foreground="Gray" HorizontalAlignment="Center"/>
             <TextBlock Text="尚未配置云端存储" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-            <TextBlock Text="请前往「设置」页面添加云端存储配置（如阿里云 OSS）" 
+            <TextBlock Text="请前往「设置」页面添加云端存储配置（如阿里云 OSS 或 WebDAV）"
                        FontSize="14" Foreground="Gray" HorizontalAlignment="Center"/>
             <HyperlinkButton Content="前往设置 →" Click="GoToSettings_Click" HorizontalAlignment="Center"/>
         </StackPanel>
