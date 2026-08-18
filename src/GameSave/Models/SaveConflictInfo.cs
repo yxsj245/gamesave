@@ -72,7 +72,12 @@ public class SaveConflictReport
 
 public enum ConflictResolution
 {
+    /// <summary>取消启动，不做任何修改</summary>
     Cancel,
-    Overwrite,
-    Rebackup
+    /// <summary>用当前存档覆盖退出存档（删除旧退出存档后重建），备份成功后继续启动</summary>
+    OverwriteExitSave,
+    /// <summary>将当前存档备份为一个新的存档（保留旧退出存档），不覆盖游戏目录，直接启动</summary>
+    SaveAsNewAndLaunch,
+    /// <summary>用退出存档覆盖游戏存档目录（放弃当前存档修改），然后启动游戏</summary>
+    OverwriteGameSave
 }

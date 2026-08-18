@@ -2736,46 +2736,202 @@ namespace GameSave.Views
                 });
             }
 
+            // 冲突列表限制高度，避免占用过多空间导致底部操作按钮被裁剪
             var scrollViewer = new ScrollViewer
             {
                 Content = conflictsPanel,
-                MaxHeight = 320,
+                MaxHeight = 200,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto
             };
             summaryPanel.Children.Add(scrollViewer);
 
-            var noteText = new TextBlock
-            {
-                Text = "\n请选择处理方式：\n" +
-                       "• 「覆盖退出存档」— 当前存档将作为下一次启动时的恢复基准\n" +
-                       "• 「重新备份」— 将当前存档内容备份为新的退出存档版本\n" +
-                       "• 「取消启动」— 不做任何操作，取消本次启动",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray),
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 8, 0, 0)
-            };
-            summaryPanel.Children.Add(noteText);
+            // ===== 处理方式操作区（每个按钮带悬停提示，覆盖/还原类操作需要二次确认）=====
+            // 布局：第一个「覆盖退出存档」为推荐按钮，占满整行；其余三个按钮横向换行排列
+            var actionsPanel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 14, 0, 0) };
 
-            var dialog = new ContentDialog
+            var btnOverwriteExitSave = CreateConflictActionButton(
+                "覆盖退出存档（推荐）",
+                "用当前存档内容覆盖退出存档（删除旧的退出存档），备份成功后继续启动游戏。\n\n此操作会修改退出存档，点击后需二次确认。",
+                isRecommended: true);
+            var btnSaveAsNew = CreateConflictActionButton(
+                "另存为新存档并继续启动",
+                "将当前存档备份为一个新的存档（保留现有退出存档），不覆盖当前游戏存档，直接以当前游戏存档目录启动。");
+            var btnOverwriteGameSave = CreateConflictActionButton(
+                "覆盖游戏存档并继续启动",
+                "放弃当前存档的修改，用退出存档覆盖游戏存档目录，然后启动游戏。\n\n此操作会覆盖当前游戏存档，点击后需二次确认。");
+            var btnCancel = CreateConflictActionButton(
+                "取消启动",
+                "不做任何操作，取消本次启动。");
+
+            actionsPanel.Children.Add(btnOverwriteExitSave);
+
+            // 中间两个操作选项横向排布，空间不足时自动换行
+            var wrapActions = new VariableSizedWrapGrid
             {
-                Title = "⚠️ 检测到存档文件冲突",
+                Orientation = Orientation.Horizontal,
+                ItemWidth = 208,
+                ItemHeight = 48
+            };
+            wrapActions.Children.Add(btnSaveAsNew);
+            wrapActions.Children.Add(btnOverwriteGameSave);
+
+            actionsPanel.Children.Add(wrapActions);
+
+            // 取消启动单独一排，占满整行
+            actionsPanel.Children.Add(btnCancel);
+            summaryPanel.Children.Add(actionsPanel);
+
+            summaryPanel.Children.Add(new TextBlock
+            {
+                Text = "💡 鼠标悬停在选项上可查看具体处理方式。",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+
+            // 整个内容再包一层滚动容器，防止小屏幕/低分辨率下底部操作按钮被 ContentDialog 裁剪不可见
+            var contentScrollViewer = new ScrollViewer
+            {
                 Content = summaryPanel,
-                PrimaryButtonText = "覆盖退出存档",
-                SecondaryButtonText = "重新备份",
-                CloseButtonText = "取消启动",
-                DefaultButton = ContentDialogButton.Primary,
+                MaxHeight = 560,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
+
+            var tcs = new TaskCompletionSource<ConflictResolution>();
+            // 标记是否正在二次确认流程中（此时关闭冲突对话框不应被视为"取消启动"）
+            bool confirming = false;
+            ContentDialog? dialog = null;
+
+            btnOverwriteExitSave.Click += async (_, _) =>
+            {
+                if (tcs.Task.IsCompleted) return;
+                confirming = true;
+                dialog?.Hide();
+
+                var confirmed = await ShowConflictConfirmAsync(
+                    "覆盖退出存档",
+                    "此操作将删除旧的退出存档，并用当前存档内容覆盖重建，备份成功后继续启动游戏。\n\n确定继续？");
+
+                if (confirmed)
+                {
+                    tcs.TrySetResult(ConflictResolution.OverwriteExitSave);
+                }
+                else
+                {
+                    // 用户取消二次确认：重新弹出冲突对话框，保留选择机会
+                    confirming = false;
+                    tcs.TrySetResult(await ShowSaveConflictDialogAsync(report));
+                }
+            };
+
+            btnSaveAsNew.Click += (_, _) =>
+            {
+                if (tcs.Task.IsCompleted) return;
+                tcs.TrySetResult(ConflictResolution.SaveAsNewAndLaunch);
+                dialog?.Hide();
+            };
+
+            btnCancel.Click += (_, _) =>
+            {
+                if (tcs.Task.IsCompleted) return;
+                tcs.TrySetResult(ConflictResolution.Cancel);
+                dialog?.Hide();
+            };
+
+            btnOverwriteGameSave.Click += async (_, _) =>
+            {
+                if (tcs.Task.IsCompleted) return;
+                confirming = true;
+                dialog?.Hide();
+
+                var confirmed = await ShowConflictConfirmAsync(
+                    "覆盖游戏存档并继续启动",
+                    "此操作将用退出存档覆盖当前游戏存档目录，当前存档的修改将被丢弃。\n\n确定继续？");
+
+                if (confirmed)
+                {
+                    tcs.TrySetResult(ConflictResolution.OverwriteGameSave);
+                }
+                else
+                {
+                    // 用户取消二次确认：重新弹出冲突对话框，保留选择机会
+                    confirming = false;
+                    tcs.TrySetResult(await ShowSaveConflictDialogAsync(report));
+                }
+            };
+
+            dialog = new ContentDialog
+            {
+                Title = "⚠️ 检测到存档文件变化",
+                Content = contentScrollViewer,
+                MinWidth = 440,
                 XamlRoot = this.XamlRoot
             };
 
-            var result = await dialog.ShowWithThemeAsync();
-
-            return result switch
+            dialog.Closing += (_, _) =>
             {
-                ContentDialogResult.Primary => ConflictResolution.Overwrite,
-                ContentDialogResult.Secondary => ConflictResolution.Rebackup,
-                _ => ConflictResolution.Cancel
+                // 未选择任何操作时（按 Esc / 右上角关闭等），按取消启动处理；
+                // 处于二次确认流程中的 Hide 不算取消
+                if (!confirming && !tcs.Task.IsCompleted)
+                    tcs.TrySetResult(ConflictResolution.Cancel);
             };
+
+            await dialog.ShowWithThemeAsync();
+            return await tcs.Task;
+        }
+
+        /// <summary>
+        /// 创建冲突处理操作按钮（带鼠标悬停说明，文字支持换行，避免长选项名被裁剪）
+        /// </summary>
+        /// <param name="text">按钮文字</param>
+        /// <param name="tooltip">鼠标悬停说明</param>
+        /// <param name="isRecommended">是否使用推荐（强调）样式</param>
+        /// <param name="margin">按钮外边距（用于换行网格中控制间距）</param>
+        private static Button CreateConflictActionButton(string text, string tooltip, bool isRecommended = false, Thickness? margin = null)
+        {
+            var button = new Button
+            {
+                Content = new TextBlock
+                {
+                    Text = text,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxLines = 2
+                },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                MinHeight = 40,
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = margin ?? new Thickness(4)
+            };
+
+            if (isRecommended && Application.Current.Resources.TryGetValue("AccentButtonStyle", out var styleObj) && styleObj is Style accentStyle)
+            {
+                button.Style = accentStyle;
+            }
+
+            ToolTipService.SetToolTip(button, tooltip);
+            return button;
+        }
+
+        /// <summary>
+        /// 冲突处理的二次确认警告弹窗
+        /// </summary>
+        /// <returns>true 表示用户确认继续，false 表示取消</returns>
+        private async Task<bool> ShowConflictConfirmAsync(string title, string message)
+        {
+            var confirmDialog = new ContentDialog
+            {
+                Title = $"⚠️ {title}",
+                Content = message,
+                PrimaryButtonText = "确认继续",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+            var result = await confirmDialog.ShowWithThemeAsync();
+            return result == ContentDialogResult.Primary;
         }
 
         #endregion

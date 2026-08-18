@@ -43,6 +43,9 @@ public class GameStatusInfo
 /// </summary>
 public class GameService
 {
+    /// <summary>存档冲突时"另存为新存档"使用的存档名称</summary>
+    private const string ConflictSaveCopyName = "存档副本";
+
     private readonly ConfigService _configService;
     private readonly LocalStorageService _localStorageService;
     private readonly ProcessMonitorService _processMonitorService;
@@ -269,29 +272,68 @@ public class GameService
                             return false;
                         }
 
-                        skipRestore = true;
-
-                        game.LaunchStatusMessage = "正在更新退出存档...";
-                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        switch (resolution)
                         {
-                            Status = GameRunStatus.Launching,
-                            GameName = game.Name,
-                            GameId = game.Id,
-                            Message = $"正在用当前存档更新 {game.Name} 的退出存档...",
-                            Progress = 55
-                        });
+                            case Models.ConflictResolution.OverwriteExitSave:
+                                // 覆盖退出存档：删除旧的退出存档，用当前存档内容重建，备份成功后继续启动
+                                skipRestore = true;
 
-                        await _localStorageService.CreateExitSaveAsync(game, useHotBackup: false);
+                                game.LaunchStatusMessage = "正在更新退出存档...";
+                                StatusChanged?.Invoke(this, new GameStatusInfo
+                                {
+                                    Status = GameRunStatus.Launching,
+                                    GameName = game.Name,
+                                    GameId = game.Id,
+                                    Message = $"正在用当前存档更新 {game.Name} 的退出存档...",
+                                    Progress = 55
+                                });
 
-                        game.LaunchStatusMessage = "退出存档已更新，正在启动游戏...";
-                        StatusChanged?.Invoke(this, new GameStatusInfo
-                        {
-                            Status = GameRunStatus.Launching,
-                            GameName = game.Name,
-                            GameId = game.Id,
-                            Message = $"{game.Name} 退出存档已更新，正在启动游戏...",
-                            Progress = 80
-                        });
+                                await _localStorageService.CreateExitSaveAsync(game, useHotBackup: false);
+
+                                game.LaunchStatusMessage = "退出存档已更新，正在启动游戏...";
+                                StatusChanged?.Invoke(this, new GameStatusInfo
+                                {
+                                    Status = GameRunStatus.Launching,
+                                    GameName = game.Name,
+                                    GameId = game.Id,
+                                    Message = $"{game.Name} 退出存档已更新，正在启动游戏...",
+                                    Progress = 80
+                                });
+                                break;
+
+                            case Models.ConflictResolution.SaveAsNewAndLaunch:
+                                // 另存为新存档：将当前存档备份为一个新存档（保留旧退出存档），
+                                // 不覆盖当前游戏存档目录，直接以当前目录内容启动
+                                skipRestore = true;
+
+                                game.LaunchStatusMessage = "正在另存为新存档...";
+                                StatusChanged?.Invoke(this, new GameStatusInfo
+                                {
+                                    Status = GameRunStatus.Launching,
+                                    GameName = game.Name,
+                                    GameId = game.Id,
+                                    Message = $"正在将当前存档另存为 {game.Name} 的新存档...",
+                                    Progress = 55
+                                });
+
+                                await _localStorageService.BackupSaveAsync(game, ConflictSaveCopyName, "存档冲突时另存的新存档", useHotBackup: false);
+
+                                game.LaunchStatusMessage = "新存档已保存，正在启动游戏...";
+                                StatusChanged?.Invoke(this, new GameStatusInfo
+                                {
+                                    Status = GameRunStatus.Launching,
+                                    GameName = game.Name,
+                                    GameId = game.Id,
+                                    Message = $"{game.Name} 新存档已保存，正在启动游戏...",
+                                    Progress = 80
+                                });
+                                break;
+
+                            case Models.ConflictResolution.OverwriteGameSave:
+                                // 覆盖游戏存档：用退出存档覆盖游戏存档目录（放弃当前存档修改），
+                                // 走下方"清空目录 + 解压退出存档"的正常恢复流程，然后启动
+                                break;
+                        }
                     }
                 }
 
