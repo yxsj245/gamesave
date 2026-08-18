@@ -404,77 +404,95 @@ public class GameService
         bool isSteamLaunch = game.LaunchViaSteam;
         bool steamNoMonitoring = isSteamLaunch && !game.HasProcessPath;
 
-        if (isSteamLaunch)
+        try
         {
-            // Steam 启动模式：通过 steam://rungameid/{appId} 协议启动
-            process = _processMonitorService.LaunchViaSteamProtocol(game.SteamAppId!);
-            if (process != null)
+            if (isSteamLaunch)
             {
-                allProcesses.Add(process);
-            }
-
-            // 如果还有配置的附加进程，按顺序启动
-            if (processEntries.Count > 1)
-            {
-                // 跳过主进程条目（Steam 已代替），只启动第二进程
-                var secondaryEntries = processEntries.Skip(1).ToList();
-                if (secondaryEntries.Count > 0)
+                // Steam 启动模式：通过 steam://rungameid/{appId} 协议启动
+                process = _processMonitorService.LaunchViaSteamProtocol(game.SteamAppId!);
+                if (process != null)
                 {
-                    var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(secondaryEntries);
-                    if (!multiResult.Success)
+                    allProcesses.Add(process);
+                }
+
+                // 如果还有配置的附加进程，按顺序启动
+                if (processEntries.Count > 1)
+                {
+                    // 跳过主进程条目（Steam 已代替），只启动第二进程
+                    var secondaryEntries = processEntries.Skip(1).ToList();
+                    if (secondaryEntries.Count > 0)
                     {
-                        game.LaunchStatusMessage = string.Empty;
-                        StatusChanged?.Invoke(this, new GameStatusInfo
+                        var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(secondaryEntries);
+                        if (!multiResult.Success)
                         {
-                            Status = GameRunStatus.Idle,
-                            GameName = game.Name,
-                            GameId = game.Id,
-                            Message = multiResult.ErrorMessage ?? "启动失败"
-                        });
-                        LastLaunchError = multiResult.ErrorMessage;
-                        ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
-                        return false;
+                            game.LaunchStatusMessage = string.Empty;
+                            StatusChanged?.Invoke(this, new GameStatusInfo
+                            {
+                                Status = GameRunStatus.Idle,
+                                GameName = game.Name,
+                                GameId = game.Id,
+                                Message = multiResult.ErrorMessage ?? "启动失败"
+                            });
+                            LastLaunchError = multiResult.ErrorMessage;
+                            ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
+                            return false;
+                        }
+                        allProcesses.AddRange(multiResult.LaunchedProcesses);
                     }
-                    allProcesses.AddRange(multiResult.LaunchedProcesses);
                 }
             }
-        }
-        else if (processEntries.Count > 1)
-        {
-            // 多进程模式：顺序启动，前一个成功后再启动下一个
-            var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(processEntries);
-            if (!multiResult.Success)
+            else if (processEntries.Count > 1)
             {
-                // 启动失败，通知 UI 层弹窗
-                game.LaunchStatusMessage = string.Empty;
-                StatusChanged?.Invoke(this, new GameStatusInfo
+                // 多进程模式：顺序启动，前一个成功后再启动下一个
+                var multiResult = await _processMonitorService.LaunchMultipleProcessesAsync(processEntries);
+                if (!multiResult.Success)
                 {
-                    Status = GameRunStatus.Idle,
-                    GameName = game.Name,
-                    GameId = game.Id,
-                    Message = multiResult.ErrorMessage ?? "启动失败"
-                });
-                LastLaunchError = multiResult.ErrorMessage;
-                ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
-                return false;
+                    // 启动失败，通知 UI 层弹窗
+                    game.LaunchStatusMessage = string.Empty;
+                    StatusChanged?.Invoke(this, new GameStatusInfo
+                    {
+                        Status = GameRunStatus.Idle,
+                        GameName = game.Name,
+                        GameId = game.Id,
+                        Message = multiResult.ErrorMessage ?? "启动失败"
+                    });
+                    LastLaunchError = multiResult.ErrorMessage;
+                    ProcessLaunchFailed?.Invoke(this, multiResult.ErrorMessage ?? "启动失败");
+                    return false;
+                }
+                allProcesses = multiResult.LaunchedProcesses;
+                process = allProcesses.FirstOrDefault();
             }
-            allProcesses = multiResult.LaunchedProcesses;
-            process = allProcesses.FirstOrDefault();
-        }
-        else
-        {
-            // 单进程模式：保持原有逻辑
-            if (!isSteamLaunch)
+            else
             {
-                process = _processMonitorService.LaunchProcess(game.ProcessPath!, game.ProcessArgs);
-                if (process == null)
-                    throw new InvalidOperationException("启动游戏进程失败");
-                allProcesses.Add(process);
+                // 单进程模式：保持原有逻辑
+                if (!isSteamLaunch)
+                {
+                    process = _processMonitorService.LaunchProcess(game.ProcessPath!, game.ProcessArgs);
+                    if (process == null)
+                        throw new InvalidOperationException("启动游戏进程失败");
+                    allProcesses.Add(process);
+                }
             }
-        }
 
-        if (process == null && !isSteamLaunch)
-            throw new InvalidOperationException("启动游戏进程失败");
+            if (process == null && !isSteamLaunch)
+                throw new InvalidOperationException("启动游戏进程失败");
+        }
+        catch
+        {
+            // 启动失败（进程路径无效、权限不足、Steam 未运行等异常情况）：
+            // 先清空启动状态消息并恢复空闲状态，避免列表项启动按钮旁残留"正在启动..."提示，
+            // 再重新抛出异常，由上层捕获后弹窗提示具体错误
+            game.LaunchStatusMessage = string.Empty;
+            StatusChanged?.Invoke(this, new GameStatusInfo
+            {
+                Status = GameRunStatus.Idle,
+                GameName = game.Name,
+                GameId = game.Id,
+                Message = $"启动 {game.Name} 失败"
+            });
+            throw;
+        }
 
         if (steamNoMonitoring)
         {

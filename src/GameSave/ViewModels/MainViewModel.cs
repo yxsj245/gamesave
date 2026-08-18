@@ -713,6 +713,11 @@ public partial class MainViewModel : BaseViewModel
         catch (Exception ex)
         {
             StatusMessage = $"启动游戏失败: {ex.Message}";
+            // 兜底：确保启动失败后清空列表项启动状态消息，避免"正在启动..."提示残留
+            if (SelectedGame != null)
+            {
+                SelectedGame.LaunchStatusMessage = string.Empty;
+            }
             return (false, StatusMessage);
         }
         finally
@@ -843,6 +848,8 @@ public partial class MainViewModel : BaseViewModel
         catch (Exception ex)
         {
             StatusMessage = $"启动游戏失败: {ex.Message}";
+            // 兜底：确保启动失败后清空列表项启动状态消息，避免"正在启动..."提示残留
+            game.LaunchStatusMessage = string.Empty;
             return (false, StatusMessage);
         }
         finally
