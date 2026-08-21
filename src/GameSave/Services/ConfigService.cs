@@ -28,6 +28,12 @@ public class AppConfig
 
     /// <summary>首页游戏列表展示模式</summary>
     public HomeGameListViewMode HomeGameListViewMode { get; set; } = HomeGameListViewMode.List;
+
+    /// <summary>是否启用游戏内快捷存档快捷键</summary>
+    public bool QuickSaveHotkeyEnabled { get; set; } = true;
+
+    /// <summary>游戏内快捷存档快捷键</summary>
+    public HotkeyGesture QuickSaveHotkey { get; set; } = HotkeyGesture.Default;
 }
 
 /// <summary>
@@ -129,6 +135,12 @@ public class ConfigService
     /// <summary>首页游戏列表展示模式</summary>
     public HomeGameListViewMode HomeGameListViewMode => _config.HomeGameListViewMode;
 
+    /// <summary>是否启用游戏内快捷存档快捷键</summary>
+    public bool QuickSaveHotkeyEnabled => _config.QuickSaveHotkeyEnabled;
+
+    /// <summary>游戏内快捷存档快捷键</summary>
+    public HotkeyGesture QuickSaveHotkey => _config.QuickSaveHotkey;
+
     /// <summary>
     /// 设置主题模式并保存配置
     /// </summary>
@@ -153,6 +165,16 @@ public class ConfigService
     public async Task SetHomeGameListViewModeAsync(HomeGameListViewMode viewMode)
     {
         _config.HomeGameListViewMode = viewMode;
+        await SaveConfigAsync();
+    }
+
+    /// <summary>
+    /// 设置游戏内快捷存档快捷键并保存配置。
+    /// </summary>
+    public async Task SetQuickSaveHotkeyAsync(bool enabled, HotkeyGesture gesture)
+    {
+        _config.QuickSaveHotkeyEnabled = enabled;
+        _config.QuickSaveHotkey = gesture;
         await SaveConfigAsync();
     }
 

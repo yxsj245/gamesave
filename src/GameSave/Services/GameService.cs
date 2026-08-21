@@ -41,7 +41,7 @@ public class GameStatusInfo
 /// 游戏生命周期管理服务
 /// 封装添加游戏、启动游戏、手动备份、恢复存档等核心业务流程
 /// </summary>
-public class GameService
+public class GameService : IQuickSaveGameService
 {
     /// <summary>存档冲突时"另存为新存档"使用的存档名称</summary>
     private const string ConflictSaveCopyName = "存档副本";
@@ -796,6 +796,30 @@ public class GameService
     {
         var name = string.IsNullOrWhiteSpace(saveName) ? "手动存档" : saveName;
 
+        // 手动备份根据游戏进程状态选择热备份或直接备份。
+        bool needHotBackup = !game.HasAnyLaunchMethod || ProcessMonitorService.IsProcessRunning(game.ProcessPath);
+        return await BackupCoreAsync(game, name, needHotBackup);
+    }
+
+    /// <summary>
+    /// 游戏运行中通过全局快捷键创建存档，始终使用热备份模式。
+    /// </summary>
+    public Task<SaveFile> QuickBackupAsync(Game game, DateTimeOffset backupTime)
+    {
+        return BackupCoreAsync(game, CreateQuickSaveName(backupTime), useHotBackup: true);
+    }
+
+    /// <summary>
+    /// 创建可读的快捷存档名称。
+    /// </summary>
+    public static string CreateQuickSaveName(DateTimeOffset backupTime)
+    {
+        return $"快捷存档 {backupTime.LocalDateTime:yyyy-MM-dd HH-mm-ss}";
+    }
+
+    private async Task<SaveFile> BackupCoreAsync(Game game, string name, bool useHotBackup)
+    {
+
         var progress = new Progress<double>(p =>
         {
             StatusChanged?.Invoke(this, new GameStatusInfo
@@ -808,13 +832,7 @@ public class GameService
             });
         });
 
-        // 判断是否需要热备份：
-        // - 无启动方式 → 无法判断游戏是否在外部运行，走热备份
-        // - 有启动方式且游戏正在运行 → 热备份（避免文件锁定冲突）
-        // - 有启动方式且游戏未运行 → 直接模式（节省内存）
-        bool needHotBackup = !game.HasAnyLaunchMethod || ProcessMonitorService.IsProcessRunning(game.ProcessPath);
-
-        var save = await _localStorageService.BackupSaveAsync(game, name, null, progress, needHotBackup);
+        var save = await _localStorageService.BackupSaveAsync(game, name, null, progress, useHotBackup);
         BackupCompleted?.Invoke(this, save);
 
         // 通知：本地备份完成

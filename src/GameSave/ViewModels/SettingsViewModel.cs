@@ -11,6 +11,7 @@ namespace GameSave.ViewModels;
 public partial class SettingsViewModel : BaseViewModel
 {
     private readonly ConfigService _configService;
+    private readonly IGlobalHotkeyService? _globalHotkeyService;
 
     /// <summary>
     /// 应用版本号（从程序集信息中读取，构建时由 MSBuild 注入）
@@ -18,14 +19,15 @@ public partial class SettingsViewModel : BaseViewModel
     public string AppVersion { get; } = AppVersionHelper.GetVersion();
 
     public SettingsViewModel()
-        : this(App.ConfigService)
+        : this(App.ConfigService, App.GlobalHotkeyService)
     {
     }
 
-    public SettingsViewModel(ConfigService configService)
+    public SettingsViewModel(ConfigService configService, IGlobalHotkeyService? globalHotkeyService = null)
     {
         Title = "设置";
         _configService = configService;
+        _globalHotkeyService = globalHotkeyService;
     }
 
     #region 外观设置（主题）
@@ -72,6 +74,91 @@ public partial class SettingsViewModel : BaseViewModel
             "Dark" => 2,
             _ => 0  // "System" 或其他
         };
+    }
+
+    #endregion
+
+    #region 快捷存档快捷键
+
+    private bool _isQuickSaveHotkeyEnabled;
+    public bool IsQuickSaveHotkeyEnabled
+    {
+        get => _isQuickSaveHotkeyEnabled;
+        private set => SetProperty(ref _isQuickSaveHotkeyEnabled, value);
+    }
+
+    private HotkeyGesture _quickSaveHotkey = HotkeyGesture.Default;
+    public HotkeyGesture QuickSaveHotkey
+    {
+        get => _quickSaveHotkey;
+        private set
+        {
+            if (SetProperty(ref _quickSaveHotkey, value))
+                OnPropertyChanged(nameof(QuickSaveHotkeyDisplayText));
+        }
+    }
+
+    public string QuickSaveHotkeyDisplayText => QuickSaveHotkey.ToDisplayString();
+
+    private string _quickSaveHotkeyStatusMessage = string.Empty;
+    public string QuickSaveHotkeyStatusMessage
+    {
+        get => _quickSaveHotkeyStatusMessage;
+        private set => SetProperty(ref _quickSaveHotkeyStatusMessage, value);
+    }
+
+    public bool IsQuickSaveHotkeyStatusError { get; private set; }
+
+    /// <summary>
+    /// 先更新系统注册，成功后再持久化；失败时保留原配置。
+    /// </summary>
+    public async Task<(bool success, string message)> ApplyQuickSaveHotkeyAsync(bool enabled, HotkeyGesture gesture)
+    {
+        if (!gesture.IsValid(out var validationMessage))
+        {
+            SetQuickSaveHotkeyStatus(validationMessage, isError: true);
+            return (false, validationMessage);
+        }
+
+        if (_globalHotkeyService == null)
+        {
+            const string unavailableMessage = "全局快捷键服务尚未初始化";
+            SetQuickSaveHotkeyStatus(unavailableMessage, isError: true);
+            return (false, unavailableMessage);
+        }
+
+        if (!_globalHotkeyService.TryUpdateRegistration(enabled, gesture, out var registrationMessage))
+        {
+            SetQuickSaveHotkeyStatus(registrationMessage, isError: true);
+            return (false, registrationMessage);
+        }
+
+        try
+        {
+            await _configService.SetQuickSaveHotkeyAsync(enabled, gesture);
+            IsQuickSaveHotkeyEnabled = enabled;
+            QuickSaveHotkey = gesture;
+            SetQuickSaveHotkeyStatus(registrationMessage, isError: false);
+            return (true, registrationMessage);
+        }
+        catch (Exception ex)
+        {
+            // 配置写入失败时恢复到原有注册状态。
+            _globalHotkeyService.TryUpdateRegistration(
+                IsQuickSaveHotkeyEnabled,
+                QuickSaveHotkey,
+                out _);
+            var failureMessage = $"快捷键配置保存失败：{ex.Message}";
+            SetQuickSaveHotkeyStatus(failureMessage, isError: true);
+            return (false, failureMessage);
+        }
+    }
+
+    private void SetQuickSaveHotkeyStatus(string message, bool isError)
+    {
+        IsQuickSaveHotkeyStatusError = isError;
+        QuickSaveHotkeyStatusMessage = message;
+        OnPropertyChanged(nameof(IsQuickSaveHotkeyStatusError));
     }
 
     #endregion
@@ -174,6 +261,12 @@ public partial class SettingsViewModel : BaseViewModel
         // 加载开机自启动状态（以注册表实际状态为准）
         _isAutoStartEnabled = AutoStartService.IsAutoStartEnabled();
         OnPropertyChanged(nameof(IsAutoStartEnabled));
+
+        IsQuickSaveHotkeyEnabled = _configService.QuickSaveHotkeyEnabled;
+        QuickSaveHotkey = _configService.QuickSaveHotkey;
+        SetQuickSaveHotkeyStatus(
+            _globalHotkeyService?.StatusMessage ?? "全局快捷键服务尚未初始化",
+            _globalHotkeyService == null || (_configService.QuickSaveHotkeyEnabled && !_globalHotkeyService.IsRegistered));
     }
 
     /// <summary>

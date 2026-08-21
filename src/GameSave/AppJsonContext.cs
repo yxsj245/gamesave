@@ -16,6 +16,7 @@ namespace GameSave;
     UseStringEnumConverter = true
 )]
 [JsonSerializable(typeof(AppConfig))]
+[JsonSerializable(typeof(HotkeyGesture))]
 [JsonSerializable(typeof(Game))]
 [JsonSerializable(typeof(SaveFile))]
 [JsonSerializable(typeof(CloudConfig))]

@@ -1,5 +1,6 @@
 using GameSave.Helpers;
 using GameSave.Models;
+using System.Collections.Concurrent;
 
 namespace GameSave.Services;
 
@@ -13,6 +14,7 @@ public class LocalStorageService : IStorageService
     private const string TempSnapshotDirName = "_temp_snapshot";
 
     private readonly ConfigService _configService;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _backupLocks = new();
 
     public LocalStorageService(ConfigService configService)
     {
@@ -72,6 +74,20 @@ public class LocalStorageService : IStorageService
     /// true: 适用于游戏运行中或无法确定游戏是否运行的场景，避免文件锁定冲突。
     /// false: 直接从原目录打包，节省内存和磁盘 I/O，适用于游戏确认未运行的场景。</param>
     public async Task<SaveFile> BackupSaveAsync(Game game, string backupName, string? description = null, IProgress<double>? progress = null, bool useHotBackup = true)
+    {
+        var backupLock = _backupLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
+        await backupLock.WaitAsync();
+        try
+        {
+            return await BackupSaveCoreAsync(game, backupName, description, progress, useHotBackup);
+        }
+        finally
+        {
+            backupLock.Release();
+        }
+    }
+
+    private async Task<SaveFile> BackupSaveCoreAsync(Game game, string backupName, string? description, IProgress<double>? progress, bool useHotBackup)
     {
         var resolvedPaths = game.ResolvedSaveFolderPaths;
         if (resolvedPaths.Count == 0)

@@ -79,6 +79,67 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 游戏内快捷存档 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        CornerRadius="8"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        Padding="20">
+                    <StackPanel Spacing="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE765;" FontSize="20" Foreground="{ThemeResource AccentFillColorDefaultBrush}"/>
+                                <TextBlock Text="快捷存档" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="QuickSaveHotkeyToggle"
+                                          Grid.Column="1"
+                                          VerticalAlignment="Center"
+                                          Loaded="QuickSaveHotkeyToggle_Loaded"
+                                          Toggled="QuickSaveHotkeyToggle_Toggled"
+                                          OnContent="" OffContent=""/>
+                        </Grid>
+
+                        <TextBlock Text="游戏运行时按下全局快捷键，立即创建一份按时间命名的热备份"
+                                   FontSize="13"
+                                   Foreground="Gray"
+                                   TextWrapping="Wrap"/>
+
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="QuickSaveHotkeyTextBox"
+                                     Grid.Column="0"
+                                     IsReadOnly="True"
+                                     Text="{x:Bind ViewModel.QuickSaveHotkeyDisplayText, Mode=OneWay}"
+                                     KeyDown="QuickSaveHotkeyTextBox_KeyDown"
+                                     AutomationProperties.Name="快捷存档快捷键"/>
+                            <Button Grid.Column="1"
+                                    Content="重新录制"
+                                    Click="RecordQuickSaveHotkey_Click"/>
+                            <Button Grid.Column="2"
+                                    Content="恢复默认"
+                                    Click="ResetQuickSaveHotkey_Click"/>
+                        </Grid>
+
+                        <TextBlock x:Name="QuickSaveHotkeyStatusText"
+                                   Text="{x:Bind ViewModel.QuickSaveHotkeyStatusMessage, Mode=OneWay}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="仅对通过本应用启动且仍在监测中的游戏生效；不使用可能触发反作弊的键盘钩子。"
+                                   FontSize="12"
+                                   Foreground="Gray"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- 工作目录设置 -->
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         CornerRadius="8"

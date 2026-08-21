@@ -1,5 +1,6 @@
 using GameSave.Models;
 using GameSave.Services;
+using System.Runtime.InteropServices;
 
 namespace GameSave.Views
 {
@@ -10,6 +11,10 @@ namespace GameSave.Views
     {
         /// <summary>标记是否正在加载设置（避免触发 Toggled 事件）</summary>
         private bool _isLoadingSettings;
+        private bool _isRecordingQuickSaveHotkey;
+
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int virtualKey);
 
         public SettingsPage()
         {
@@ -24,6 +29,7 @@ namespace GameSave.Views
             ViewModel.LoadSettings();
             _isLoadingSettings = false;
             UpdateNoConfigHint();
+            UpdateQuickSaveHotkeyStatus();
 
             // 检查工作目录是否被启动参数锁定
             if (ViewModel.IsWorkDirLocked)
@@ -80,6 +86,120 @@ namespace GameSave.Views
             if (sender is Microsoft.UI.Xaml.Controls.ToggleSwitch toggle)
             {
                 ViewModel.IsAutoStartEnabled = toggle.IsOn;
+            }
+        }
+
+        /// <summary>
+        /// 快捷存档开关加载完成。
+        /// </summary>
+        private void QuickSaveHotkeyToggle_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (sender is not ToggleSwitch toggle) return;
+
+            _isLoadingSettings = true;
+            toggle.IsOn = ViewModel.IsQuickSaveHotkeyEnabled;
+            _isLoadingSettings = false;
+        }
+
+        /// <summary>
+        /// 启用或关闭快捷存档快捷键。
+        /// </summary>
+        private async void QuickSaveHotkeyToggle_Toggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            if (_isLoadingSettings || sender is not ToggleSwitch toggle) return;
+
+            await ViewModel.ApplyQuickSaveHotkeyAsync(toggle.IsOn, ViewModel.QuickSaveHotkey);
+            if (toggle.IsOn != ViewModel.IsQuickSaveHotkeyEnabled)
+            {
+                _isLoadingSettings = true;
+                toggle.IsOn = ViewModel.IsQuickSaveHotkeyEnabled;
+                _isLoadingSettings = false;
+            }
+
+            UpdateQuickSaveHotkeyStatus();
+        }
+
+        /// <summary>
+        /// 进入快捷键录制状态。
+        /// </summary>
+        private void RecordQuickSaveHotkey_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            _isRecordingQuickSaveHotkey = true;
+            QuickSaveHotkeyTextBox.Text = "请按下新的快捷键组合…";
+            QuickSaveHotkeyTextBox.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            QuickSaveHotkeyTextBox.SelectAll();
+            QuickSaveHotkeyStatusText.Text = "请按住 Ctrl、Alt 或 Shift，再按 A-Z、0-9 或 F1-F11";
+            SetQuickSaveHotkeyStatusBrush(isError: false);
+        }
+
+        /// <summary>
+        /// 恢复默认快捷键 Ctrl+Shift+F5。
+        /// </summary>
+        private async void ResetQuickSaveHotkey_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        {
+            _isRecordingQuickSaveHotkey = false;
+            await ViewModel.ApplyQuickSaveHotkeyAsync(
+                ViewModel.IsQuickSaveHotkeyEnabled,
+                HotkeyGesture.Default);
+            QuickSaveHotkeyTextBox.Text = ViewModel.QuickSaveHotkeyDisplayText;
+            UpdateQuickSaveHotkeyStatus();
+        }
+
+        /// <summary>
+        /// 捕获用户输入的快捷键组合。
+        /// </summary>
+        private async void QuickSaveHotkeyTextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (!_isRecordingQuickSaveHotkey) return;
+
+            e.Handled = true;
+            var virtualKey = (int)e.Key;
+            if (virtualKey is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C)
+                return;
+
+            var modifiers = HotkeyModifiers.None;
+            if (IsKeyDown(0x11)) modifiers |= HotkeyModifiers.Control;
+            if (IsKeyDown(0x12)) modifiers |= HotkeyModifiers.Alt;
+            if (IsKeyDown(0x10)) modifiers |= HotkeyModifiers.Shift;
+            if (IsKeyDown(0x5B) || IsKeyDown(0x5C)) modifiers |= HotkeyModifiers.Windows;
+
+            var gesture = new HotkeyGesture(modifiers, virtualKey);
+            if (!gesture.IsValid(out var validationMessage))
+            {
+                QuickSaveHotkeyStatusText.Text = validationMessage;
+                SetQuickSaveHotkeyStatusBrush(isError: true);
+                return;
+            }
+
+            var (success, _) = await ViewModel.ApplyQuickSaveHotkeyAsync(
+                ViewModel.IsQuickSaveHotkeyEnabled,
+                gesture);
+            if (success)
+                _isRecordingQuickSaveHotkey = false;
+
+            QuickSaveHotkeyTextBox.Text = success
+                ? ViewModel.QuickSaveHotkeyDisplayText
+                : "请按下新的快捷键组合…";
+            UpdateQuickSaveHotkeyStatus();
+        }
+
+        private static bool IsKeyDown(int virtualKey) => (GetKeyState(virtualKey) & 0x8000) != 0;
+
+        private void UpdateQuickSaveHotkeyStatus()
+        {
+            QuickSaveHotkeyStatusText.Text = ViewModel.QuickSaveHotkeyStatusMessage;
+            SetQuickSaveHotkeyStatusBrush(ViewModel.IsQuickSaveHotkeyStatusError);
+        }
+
+        private void SetQuickSaveHotkeyStatusBrush(bool isError)
+        {
+            var resourceKey = isError
+                ? "SystemFillColorCriticalBrush"
+                : "TextFillColorSecondaryBrush";
+            if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue(resourceKey, out var resource)
+                && resource is Microsoft.UI.Xaml.Media.Brush brush)
+            {
+                QuickSaveHotkeyStatusText.Foreground = brush;
             }
         }
 

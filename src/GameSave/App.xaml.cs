@@ -51,6 +51,8 @@ namespace GameSave
         public static LocalStorageService LocalStorageService { get; private set; } = null!;
         public static GameService GameService { get; private set; } = null!;
         public static ScheduledBackupService ScheduledBackupService { get; private set; } = null!;
+        public static GlobalHotkeyService? GlobalHotkeyService { get; private set; }
+        public static QuickSaveService QuickSaveService { get; private set; } = null!;
 
         public App()
         {
@@ -140,6 +142,46 @@ namespace GameSave
             // 调试模式下也启动命名管道监听器
             StartPipeListener();
 #endif
+
+            InitializeQuickSaveHotkey();
+        }
+
+        /// <summary>
+        /// 初始化全局快捷键和快捷存档协调服务。
+        /// </summary>
+        private void InitializeQuickSaveHotkey()
+        {
+            QuickSaveService = new QuickSaveService(ConfigService, GameService, ShowTrayNotification);
+
+            try
+            {
+                GlobalHotkeyService = new GlobalHotkeyService();
+                GlobalHotkeyService.HotkeyPressed += OnQuickSaveHotkeyPressed;
+                GlobalHotkeyService.TryUpdateRegistration(
+                    ConfigService.QuickSaveHotkeyEnabled,
+                    ConfigService.QuickSaveHotkey,
+                    out _);
+            }
+            catch (Exception ex)
+            {
+                GlobalHotkeyService = null;
+                System.Diagnostics.Debug.WriteLine($"[快捷存档] 全局快捷键初始化失败：{ex.Message}");
+                ShowTrayNotification("❌ 快捷键初始化失败", ex.Message);
+            }
+        }
+
+        private async void OnQuickSaveHotkeyPressed()
+        {
+            await QuickSaveService.ExecuteAsync();
+        }
+
+        private void DisposeQuickSaveHotkey()
+        {
+            if (GlobalHotkeyService == null) return;
+
+            GlobalHotkeyService.HotkeyPressed -= OnQuickSaveHotkeyPressed;
+            GlobalHotkeyService.Dispose();
+            GlobalHotkeyService = null;
         }
 
         /// <summary>
@@ -215,6 +257,8 @@ namespace GameSave
         {
             _isExiting = true;
 
+            DisposeQuickSaveHotkey();
+
             // 停止命名管道监听
             StopPipeListener();
 
@@ -234,6 +278,8 @@ namespace GameSave
         {
             var app = (App)Current;
             app._isExiting = true;
+
+            app.DisposeQuickSaveHotkey();
 
             // 清理托盘图标
             app._trayIcon?.Dispose();
@@ -260,9 +306,12 @@ namespace GameSave
                 switch (e.Status)
                 {
                     case Services.GameRunStatus.Completed:
-                        // 备份完成，发送成功通知
-                        _trayIcon?.ShowBalloonTip("✅ 存档备份成功",
-                            $"「{e.GameName}」的存档已备份完成。");
+                        // 快捷存档由 QuickSaveService 单独通知，避免重复气泡。
+                        if (!QuickSaveService.IsExecuting)
+                        {
+                            _trayIcon?.ShowBalloonTip("✅ 存档备份成功",
+                                $"「{e.GameName}」的存档已备份完成。");
+                        }
                         break;
 
                     case Services.GameRunStatus.Idle:
