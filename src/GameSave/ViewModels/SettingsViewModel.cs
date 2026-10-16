@@ -275,7 +275,7 @@ public partial class SettingsViewModel : BaseViewModel
     public async Task ChangeWorkDirectoryAsync(string newPath)
     {
         await _configService.ChangeWorkDirectoryAsync(newPath);
-        WorkDirectory = newPath;
+        WorkDirectory = _configService.WorkDirectory;
     }
 
     /// <summary>
@@ -286,7 +286,7 @@ public partial class SettingsViewModel : BaseViewModel
     public async Task ChangeWorkDirectoryWithMigrationAsync(string newPath, IProgress<(double percent, string status)>? progress = null)
     {
         await _configService.ChangeWorkDirectoryWithMigrationAsync(newPath, progress);
-        WorkDirectory = newPath;
+        WorkDirectory = _configService.WorkDirectory;
     }
 
     #endregion

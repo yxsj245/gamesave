@@ -119,9 +119,12 @@ public class ConfigService
 
     private AppConfig _config = new();
     private string _configFilePath = string.Empty;
+    private readonly SemaphoreSlim _saveLock = new(1, 1);
+    private readonly SemaphoreSlim _workDirectoryChangeLock = new(1, 1);
+    private volatile bool _isChangingWorkDirectory;
 
     /// <summary>工作目录路径</summary>
-    public string WorkDirectory => _config.WorkDirectory;
+    public string WorkDirectory => IsWorkDirLockedByArgs ? GetCommandLineWorkDir() : _config.WorkDirectory;
 
     /// <summary>配置文件路径</summary>
     public string ConfigFilePath => _configFilePath;
@@ -203,7 +206,7 @@ public class ConfigService
         // 确保默认目录存在
         Directory.CreateDirectory(defaultWorkDir);
 
-        // 便携版模式下 config.json 保存在 AppData 子目录中，与数据一起便携
+        // 便携版配置保存在启动器传入的 GameSave-Data 中，不随工作目录切换。
         _configFilePath = Path.Combine(defaultWorkDir, "config.json");
 
         if (File.Exists(_configFilePath))
@@ -222,7 +225,8 @@ public class ConfigService
             // 确保实际工作目录存在，如果不可用则回滚到默认目录
             try
             {
-                Directory.CreateDirectory(_config.WorkDirectory);
+                if (!IsWorkDirLockedByArgs)
+                    Directory.CreateDirectory(_config.WorkDirectory);
             }
             catch (Exception ex) when (ex is DirectoryNotFoundException
                                     || ex is IOException
@@ -247,13 +251,7 @@ public class ConfigService
             await SaveConfigAsync();
         }
 
-        // --workdir 参数具有最高优先级，覆盖所有其他工作目录设置
-        // 注意：不写入 config.json，仅在运行时生效
-        var cmdWorkDir = GetCommandLineWorkDir();
-        if (!string.IsNullOrEmpty(cmdWorkDir))
-        {
-            _config.WorkDirectory = cmdWorkDir;
-        }
+        // 启动参数只通过 WorkDirectory 属性覆盖运行时值，不能污染持久配置。
     }
 
     /// <summary>
@@ -261,88 +259,203 @@ public class ConfigService
     /// </summary>
     public async Task SaveConfigAsync()
     {
-        var json = JsonSerializer.Serialize(_config, AppJsonContext.Default.AppConfig);
-        await File.WriteAllTextAsync(_configFilePath, json);
+        await _saveLock.WaitAsync();
+        try { await WriteConfigFileAsync(); }
+        finally { _saveLock.Release(); }
     }
 
-    /// <summary>
-    /// 修改工作目录（仅更新配置，不迁移旧内容）
-    /// config.json 保持在默认目录，只更新其中的 WorkDirectory 字段
-    /// </summary>
-    public async Task ChangeWorkDirectoryAsync(string newPath)
+    private async Task WriteConfigFileAsync()
     {
-        Directory.CreateDirectory(newPath);
-        _config.WorkDirectory = newPath;
-        // _configFilePath 不变，始终指向默认目录下的 config.json
-        await SaveConfigAsync();
-    }
-
-    /// <summary>
-    /// 修改工作目录并迁移旧目录内容到新目录
-    /// </summary>
-    /// <param name="newPath">新的工作目录路径</param>
-    /// <param name="progress">进度回调，报告迁移百分比和当前状态文本</param>
-    public async Task ChangeWorkDirectoryWithMigrationAsync(string newPath, IProgress<(double percent, string status)>? progress = null)
-    {
-        var oldPath = _config.WorkDirectory;
-        Directory.CreateDirectory(newPath);
-
-        // 收集需要迁移的所有文件（排除 config.json）
-        var oldConfigJson = Path.Combine(oldPath, "config.json");
-        var filesToCopy = Directory.GetFiles(oldPath, "*", SearchOption.AllDirectories)
-            .Where(f => !f.Equals(_configFilePath, StringComparison.OrdinalIgnoreCase)
-                     && !f.Equals(oldConfigJson, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (filesToCopy.Count > 0)
+        string? temporaryPath = null;
+        try
         {
-            for (int i = 0; i < filesToCopy.Count; i++)
+            var json = JsonSerializer.Serialize(_config, AppJsonContext.Default.AppConfig);
+            // 同目录临时文件写完后再替换，避免直接截断现有配置。
+            temporaryPath = _configFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                var sourceFile = filesToCopy[i];
-                var relativePath = Path.GetRelativePath(oldPath, sourceFile);
-                var destFile = Path.Combine(newPath, relativePath);
-
-                // 确保目标子目录存在
-                var destDir = Path.GetDirectoryName(destFile);
-                if (destDir != null)
-                    Directory.CreateDirectory(destDir);
-
-                // 复制文件（在后台线程执行 I/O）
-                await Task.Run(() => File.Copy(sourceFile, destFile, overwrite: true));
-
-                // 报告进度
-                var percent = (double)(i + 1) / filesToCopy.Count * 100;
-                var fileName = Path.GetFileName(sourceFile);
-                progress?.Report((percent, $"正在迁移: {relativePath} ({i + 1}/{filesToCopy.Count})"));
+                var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                await stream.WriteAsync(bytes);
+                await stream.FlushAsync();
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporaryPath, _configFilePath, overwrite: true);
+        }
+        finally
+        {
+            if (temporaryPath != null && File.Exists(temporaryPath))
+            {
+                // 只清理由本次保存生成、位于配置旁的临时文件。
+                try { File.Delete(temporaryPath); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
         }
+    }
 
-        // 更新配置指向新路径（config.json 保持在默认目录）
-        _config.WorkDirectory = newPath;
-        await SaveConfigAsync();
-
-        // 清理旧工作目录：删除所有数据内容，只保留 config.json
-        progress?.Report((99, "正在清理旧工作目录..."));
-        await Task.Run(() =>
+    /// <summary>仅切换工作目录，保留旧目录中的全部内容。</summary>
+    public async Task ChangeWorkDirectoryAsync(string newPath)
+    {
+        await EnterWorkDirectoryChangeAsync();
+        try
         {
-            // 删除旧目录下的所有子目录
-            foreach (var dir in Directory.GetDirectories(oldPath))
+            var target = Helpers.WorkDirectorySafety.NormalizeDestination(newPath);
+            Helpers.WorkDirectorySafety.EnsureNoReparsePoints(target);
+            Directory.CreateDirectory(target);
+            await PersistWorkDirectoryAsync(target);
+        }
+        finally
+        {
+            _isChangingWorkDirectory = false;
+            _workDirectoryChangeLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 复制已登记游戏的数据并切换目录；不删除旧副本，不覆盖目标文件。
+    /// </summary>
+    public async Task ChangeWorkDirectoryWithMigrationAsync(string newPath, IProgress<(double percent, string status)>? progress = null)
+    {
+        await EnterWorkDirectoryChangeAsync();
+        try
+        {
+            var source = Helpers.WorkDirectorySafety.NormalizePath(WorkDirectory);
+            var target = Helpers.WorkDirectorySafety.NormalizeDestination(newPath);
+            Helpers.WorkDirectorySafety.EnsureDisjoint(source, target);
+            Helpers.WorkDirectorySafety.EnsureNoReparsePoints(source);
+            Helpers.WorkDirectorySafety.EnsureNoReparsePoints(target);
+
+            // 只迁移已登记游戏的独立子目录，绝不扫描整棵用户文档目录。
+            var directories = new List<string>();
+            var files = new List<(string source, string target)>();
+            var gameIds = _config.Games.Select(game => game.Id).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var gameId in gameIds)
             {
-                try { Directory.Delete(dir, recursive: true); } catch { }
+                Helpers.WorkDirectorySafety.ValidateGameId(gameId);
+                var gameSource = Path.Combine(source, gameId);
+                var gameTarget = Path.Combine(target, gameId);
+                if (!Directory.Exists(gameSource)) continue;
+                if (Directory.Exists(gameTarget) || File.Exists(gameTarget))
+                    throw new IOException($"目标目录已有游戏数据，为避免覆盖，请选择新的空文件夹：{gameTarget}");
+                CollectMigrationFiles(gameSource, gameTarget, directories, files);
             }
 
-            // 删除旧目录下除 config.json 外的所有文件
-            foreach (var file in Directory.GetFiles(oldPath))
+            // 预检完成后才创建目标。复制失败会保留旧目录和旧配置，目标可能留有部分副本。
+            Directory.CreateDirectory(target);
+            foreach (var directory in directories)
             {
-                if (!file.Equals(_configFilePath, StringComparison.OrdinalIgnoreCase)
-                    && !Path.GetFileName(file).Equals("config.json", StringComparison.OrdinalIgnoreCase))
-                {
-                    try { File.Delete(file); } catch { }
-                }
+                Helpers.WorkDirectorySafety.EnsureNoReparsePoints(directory);
+                Directory.CreateDirectory(directory);
             }
-        });
+            var hashes = new List<byte[]>();
+            for (var i = 0; i < files.Count; i++)
+            {
+                var item = files[i];
+                hashes.Add(await Task.Run(() => CopyAndVerifyAsync(item.source, item.target)));
+                progress?.Report(((double)(i + 1) / Math.Max(files.Count, 1) * 95,
+                    $"正在复制并校验: {Path.GetRelativePath(source, item.source)} ({i + 1}/{files.Count})"));
+            }
 
-        progress?.Report((100, "迁移完成"));
+            // 二次核对清单及内容，防止已取得旧路径的后台任务在复制期间产生新存档。
+            var verifiedFiles = new List<(string source, string target)>();
+            var verifiedDirectories = new List<string>();
+            foreach (var gameId in gameIds)
+            {
+                var gameSource = Path.Combine(source, gameId);
+                if (Directory.Exists(gameSource))
+                    CollectMigrationFiles(gameSource, Path.Combine(target, gameId), verifiedDirectories, verifiedFiles);
+            }
+            if (!gameIds.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(_config.Games.Select(game => game.Id))
+                || !files.Select(item => item.source).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    .SetEquals(verifiedFiles.Select(item => item.source)))
+                throw new IOException("复制期间游戏列表或旧目录内容发生变化，已取消切换，旧目录和配置保持不变。");
+            for (var i = 0; i < files.Count; i++)
+            {
+                Helpers.WorkDirectorySafety.EnsureNoReparsePoints(files[i].source);
+                await using var stream = new FileStream(files[i].source, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var currentHash = await System.Security.Cryptography.SHA256.HashDataAsync(stream);
+                Helpers.WorkDirectorySafety.EnsureNoReparsePoints(files[i].target);
+                await using var targetStream = new FileStream(files[i].target, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var copiedHash = await System.Security.Cryptography.SHA256.HashDataAsync(targetStream);
+                if (!currentHash.SequenceEqual(hashes[i]) || !copiedHash.SequenceEqual(hashes[i]))
+                    throw new IOException("复制期间旧存档发生变化，已取消切换，请停止备份后重试。");
+            }
+            await PersistWorkDirectoryAsync(target);
+            progress?.Report((100, "复制并切换完成，旧目录全部内容已保留"));
+        }
+        finally
+        {
+            _isChangingWorkDirectory = false;
+            _workDirectoryChangeLock.Release();
+        }
+    }
+
+    private async Task EnterWorkDirectoryChangeAsync()
+    {
+        if (IsWorkDirLockedByArgs)
+            throw new InvalidOperationException("工作目录由启动参数指定，无法更改。");
+        if (!await _workDirectoryChangeLock.WaitAsync(0))
+            throw new InvalidOperationException("工作目录正在更改，请等待当前操作完成。");
+        _isChangingWorkDirectory = true;
+        if (_config.Games.Any(game => game.IsRunning || game.IsStopping || game.IsScheduledBackupRunning))
+        {
+            _isChangingWorkDirectory = false;
+            _workDirectoryChangeLock.Release();
+            throw new InvalidOperationException("请先退出游戏并停止定时备份，再更改工作目录。");
+        }
+    }
+
+    private async Task PersistWorkDirectoryAsync(string target)
+    {
+        // 切换和回滚都在保存锁内，避免其它设置把未提交的新目录提前写入配置。
+        await _saveLock.WaitAsync();
+        var previous = _config.WorkDirectory;
+        try
+        {
+            _config.WorkDirectory = target;
+            await WriteConfigFileAsync();
+        }
+        catch
+        {
+            _config.WorkDirectory = previous;
+            throw;
+        }
+        finally { _saveLock.Release(); }
+    }
+
+    private static void CollectMigrationFiles(string source, string target,
+        List<string> directories, List<(string source, string target)> files)
+    {
+        Helpers.WorkDirectorySafety.EnsureNoReparsePoints(source);
+        directories.Add(target);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            Helpers.WorkDirectorySafety.EnsureNoReparsePoints(file);
+            files.Add((file, Path.Combine(target, Path.GetFileName(file))));
+        }
+        foreach (var directory in Directory.GetDirectories(source))
+        {
+            // 临时快照不是完成的备份，不能作为正式存档迁移。
+            if (Path.GetFileName(directory).Equals("_temp_snapshot", StringComparison.OrdinalIgnoreCase)) continue;
+            CollectMigrationFiles(directory, Path.Combine(target, Path.GetFileName(directory)), directories, files);
+        }
+    }
+
+    private static async Task<byte[]> CopyAndVerifyAsync(string source, string target)
+    {
+        Helpers.WorkDirectorySafety.EnsureNoReparsePoints(source);
+        Helpers.WorkDirectorySafety.EnsureNoReparsePoints(target);
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        await input.CopyToAsync(output);
+        await output.FlushAsync();
+        input.Position = 0;
+        output.Position = 0;
+        var sourceHash = await System.Security.Cryptography.SHA256.HashDataAsync(input);
+        var targetHash = await System.Security.Cryptography.SHA256.HashDataAsync(output);
+        if (!sourceHash.SequenceEqual(targetHash))
+            throw new IOException($"复制校验失败，旧目录未改动：{source}");
+        return sourceHash;
     }
 
     /// <summary>
@@ -350,6 +463,9 @@ public class ConfigService
     /// </summary>
     public string GetGameWorkDirectory(string gameId)
     {
+        if (_isChangingWorkDirectory)
+            throw new InvalidOperationException("正在更改工作目录，请等待完成后再操作存档。");
+        Helpers.WorkDirectorySafety.ValidateGameId(gameId);
         var dir = Path.Combine(WorkDirectory, gameId);
         Directory.CreateDirectory(dir);
         return dir;

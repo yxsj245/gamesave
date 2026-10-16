@@ -393,111 +393,79 @@ namespace GameSave.Views
             return (passwordBox, container);
         }
 
+        private bool _isChangingWorkDirectory;
+
         private async void ChangeWorkDir_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         {
-            // 双重保险：如果工作目录被启动参数锁定，不允许更改
-            if (ViewModel.IsWorkDirLocked) return;
-
-            var newPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
-            if (string.IsNullOrWhiteSpace(newPath)) return;
-
-            var oldPath = ViewModel.WorkDirectory;
-
-            // 如果选择的目录与当前工作目录相同，则无需操作
-            if (string.Equals(newPath, oldPath, StringComparison.OrdinalIgnoreCase))
-            {
-                var sameDialog = new ContentDialog
-                {
-                    Title = "提示",
-                    Content = "选择的目录与当前工作目录相同，无需更改。",
-                    CloseButtonText = "确定",
-                    XamlRoot = this.XamlRoot
-                };
-                await sameDialog.ShowWithThemeAsync();
-                return;
-            }
-
-            // 弹出对话框询问用户是否迁移旧工作目录的内容
-            var migrateDialog = new ContentDialog
-            {
-                Title = "迁移工作目录内容",
-                Content = $"是否将旧工作目录的内容迁移到新目录？\n\n旧目录: {oldPath}\n新目录: {newPath}\n\n选择「迁移」将复制所有存档文件到新目录。\n选择「不迁移」将只切换工作目录，旧目录内容保留不变。",
-                PrimaryButtonText = "迁移",
-                SecondaryButtonText = "不迁移",
-                CloseButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.XamlRoot
-            };
-
-            var result = await migrateDialog.ShowWithThemeAsync();
-
-            if (result == ContentDialogResult.None)
-                return; // 用户取消
-
-            if (result == ContentDialogResult.Secondary)
-            {
-                // 不迁移，仅更改工作目录
-                await ViewModel.ChangeWorkDirectoryAsync(newPath);
-
-                var doneDialog = new ContentDialog
-                {
-                    Title = "更改完成",
-                    Content = $"工作目录已更改为:\n{newPath}",
-                    CloseButtonText = "确定",
-                    XamlRoot = this.XamlRoot
-                };
-                await doneDialog.ShowWithThemeAsync();
-                return;
-            }
-
-            // 用户选择迁移 — 显示底部进度条并执行迁移
-            ProgressStatusText.Text = "正在迁移工作目录内容...";
-            ExportImportProgressBar.Value = 0;
-            ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-
-            var progress = new Progress<(double percent, string status)>(report =>
-            {
-                ExportImportProgressBar.Value = report.percent;
-                ProgressStatusText.Text = report.status;
-            });
-
-            var startTime = DateTime.Now;
-
+            if (ViewModel.IsWorkDirLocked || _isChangingWorkDirectory) return;
+            _isChangingWorkDirectory = true;
+            ChangeWorkDirButton.IsEnabled = false;
             try
             {
-                await ViewModel.ChangeWorkDirectoryWithMigrationAsync(newPath, progress);
-
-                // 确保进度条至少显示 500ms
-                var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
-                if (elapsed < 500)
-                    await Task.Delay((int)(500 - elapsed));
-
-                // 隐藏进度条
-                ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-
-                var successDialog = new ContentDialog
+                var selectedPath = await ShellDialogHelper.PickFolderAsync(App.MainWindow);
+                if (string.IsNullOrWhiteSpace(selectedPath)) return;
+                var newPath = Helpers.WorkDirectorySafety.NormalizeDestination(selectedPath);
+                var oldPath = Helpers.WorkDirectorySafety.NormalizePath(ViewModel.WorkDirectory);
+                if (string.Equals(newPath, oldPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    Title = "迁移完成",
-                    Content = $"工作目录已成功迁移到:\n{newPath}",
-                    CloseButtonText = "确定",
+                    await ShowWorkDirectoryMessageAsync("提示", "选择的目录与当前工作目录相同，无需更改。");
+                    return;
+                }
+
+                var migrateDialog = new ContentDialog
+                {
+                    Title = "切换工作目录",
+                    Content = $"旧目录: {oldPath}\n新目录: {newPath}\n\n「复制并切换」只复制已登记游戏的数据，旧目录的全部内容保留，不覆盖目标中的已有游戏数据。\n「仅切换」不复制任何数据，旧目录内容也保留。\n\n请先退出游戏并停止备份。复制期间不要启动游戏或进行其他备份操作。",
+                    PrimaryButtonText = "复制并切换",
+                    SecondaryButtonText = "仅切换",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Close,
                     XamlRoot = this.XamlRoot
                 };
-                await successDialog.ShowWithThemeAsync();
+                var result = await migrateDialog.ShowWithThemeAsync();
+                if (result == ContentDialogResult.None) return;
+                if (result == ContentDialogResult.Secondary)
+                {
+                    await ViewModel.ChangeWorkDirectoryAsync(newPath);
+                    await ShowWorkDirectoryMessageAsync("更改完成", $"工作目录已更改为:\n{ViewModel.WorkDirectory}\n\n旧目录内容全部保留。");
+                    return;
+                }
+
+                ProgressStatusText.Text = "正在复制并校验游戏数据...";
+                ExportImportProgressBar.Value = 0;
+                ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+                var progress = new Progress<(double percent, string status)>(report =>
+                {
+                    ExportImportProgressBar.Value = report.percent;
+                    ProgressStatusText.Text = report.status;
+                });
+                await ViewModel.ChangeWorkDirectoryWithMigrationAsync(newPath, progress);
+                await ShowWorkDirectoryMessageAsync("复制并切换完成",
+                    $"工作目录已切换到:\n{ViewModel.WorkDirectory}\n\n旧目录的全部内容仍然保留，不会自动删除。配置文件仍保存在原来的位置。");
             }
             catch (Exception ex)
             {
-                // 隐藏进度条
-                ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-
-                var errorDialog = new ContentDialog
-                {
-                    Title = "迁移失败",
-                    Content = $"迁移过程中发生错误:\n{ex.Message}",
-                    CloseButtonText = "确定",
-                    XamlRoot = this.XamlRoot
-                };
-                await errorDialog.ShowWithThemeAsync();
+                await ShowWorkDirectoryMessageAsync("更改未完成",
+                    $"操作未完成：\n{ex.Message}\n\n旧目录不会被本操作删除。若复制中断，新目录可能保留部分副本，请勿直接删除不明文件或反复迁移。");
             }
+            finally
+            {
+                ProgressPanel.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                _isChangingWorkDirectory = false;
+                ChangeWorkDirButton.IsEnabled = !ViewModel.IsWorkDirLocked;
+            }
+        }
+
+        private async Task ShowWorkDirectoryMessageAsync(string title, string message)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                CloseButtonText = "确定",
+                XamlRoot = this.XamlRoot
+            };
+            await dialog.ShowWithThemeAsync();
         }
 
         /// <summary>

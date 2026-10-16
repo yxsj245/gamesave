@@ -199,22 +199,46 @@ if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 """;
         }
 
+        /// <summary>
+        /// 构造 PowerShell 降级对话框所用的进程启动信息（无副作用，可直接单测；调用它不会弹出任何对话框）
+        /// 脚本内部的 OutputEncoding 已是 UTF8，父进程必须显式按 UTF8 解码，否则中文路径会变成乱码
+        /// </summary>
+        /// <param name="script">要执行的 PowerShell 脚本</param>
+        public static ProcessStartInfo CreatePowerShellDialogStartInfo(string script)
+        {
+            ArgumentNullException.ThrowIfNull(script);
+
+            var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                // 子进程已按 UTF8 输出，父进程必须使用同样的编码读取，避免中文路径乱码
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            // 使用 ArgumentList 交给运行时转义，避免手工拼接命令行
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-STA");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            startInfo.ArgumentList.Add("-EncodedCommand");
+            startInfo.ArgumentList.Add(encodedScript);
+
+            return startInfo;
+        }
+
         /// <summary>运行 PowerShell 降级对话框并读取结果</summary>
         private static string? RunPowerShellDialog(string script)
         {
             try
             {
-                var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-
-                using var process = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -STA -ExecutionPolicy Bypass -EncodedCommand {encodedScript}",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                });
+                using var process = Process.Start(CreatePowerShellDialogStartInfo(script));
 
                 if (process == null)
                     return null;

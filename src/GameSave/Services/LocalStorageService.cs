@@ -188,7 +188,7 @@ public class LocalStorageService : IStorageService
 
     /// <summary>
     /// 恢复存档
-    /// 校验 .tar 文件，清空游戏存档目录后解压恢复
+    /// 校验 .tar 文件，统一预检全部目标路径后，清空游戏存档目录并解压恢复
     /// </summary>
     public async Task RestoreSaveAsync(SaveFile saveFile, IProgress<double>? progress = null)
     {
@@ -206,8 +206,12 @@ public class LocalStorageService : IStorageService
         if (resolvedPaths.Count == 0)
             throw new InvalidOperationException("未设置游戏存档目录");
 
-        // 检测所有存档路径的文件是否被其他进程占用
-        foreach (var path in resolvedPaths)
+        // 在删除任何文件之前统一预检全部目标：任一路径不安全都会直接失败，此时还未改动磁盘。
+        var restoreTargets = RestorePathSafety.ResolveRestoreTargets(
+            resolvedPaths, _configService.WorkDirectory, saveFile.Path, _configService.ConfigFilePath).ToList();
+
+        // 先完成全部目标的占用检测，再开始删除，避免清空一半后因文件被占用而中断。
+        foreach (var path in restoreTargets)
         {
             if (Directory.Exists(path))
             {
@@ -216,13 +220,10 @@ public class LocalStorageService : IStorageService
                 {
                     throw new IOException($"检测到存档文件被进程占用（{path}），请退出游戏后还原，避免存档损坏");
                 }
-
-                // 清空游戏存档目录
-                ClearDirectory(path);
             }
             else if (File.Exists(path))
             {
-                // 单文件路径：检查文件是否被占用并删除
+                // 单文件路径：检查文件是否被占用
                 try
                 {
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
@@ -231,12 +232,25 @@ public class LocalStorageService : IStorageService
                 {
                     throw new IOException($"检测到存档文件被进程占用（{path}），请退出游戏后还原，避免存档损坏");
                 }
+            }
+        }
+
+        // 占用检测全部通过后再清空（目标已全部通过路径安全预检）
+        foreach (var path in restoreTargets)
+        {
+            if (Directory.Exists(path))
+            {
+                // 清空游戏存档目录
+                ClearDirectory(path);
+            }
+            else if (File.Exists(path))
+            {
                 File.Delete(path);
             }
         }
 
         // 解压 .tar 到游戏存档路径
-        await TarHelper.ExtractTarToMultipleAsync(saveFile.Path, resolvedPaths, progress);
+        await TarHelper.ExtractTarToMultipleAsync(saveFile.Path, restoreTargets, progress);
     }
 
     /// <summary>

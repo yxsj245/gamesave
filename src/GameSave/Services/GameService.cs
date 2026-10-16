@@ -339,8 +339,13 @@ public class GameService : IQuickSaveGameService
 
                 if (!skipRestore)
                 {
+                    // 在删除任何文件之前统一预检全部目标：任一路径不安全都会直接失败，此时还未改动磁盘。
+                    var restoreTargets = RestorePathSafety.ResolveRestoreTargets(
+                        game.ResolvedSaveFolderPaths, _configService.WorkDirectory, latestExitSave.Path,
+                        _configService.ConfigFilePath).ToList();
+
                     // 清空所有存档目录
-                    foreach (var savePath in game.ResolvedSaveFolderPaths)
+                    foreach (var savePath in restoreTargets)
                     {
                         if (Directory.Exists(savePath))
                         {
@@ -371,7 +376,7 @@ public class GameService : IQuickSaveGameService
                         Message = $"正在解压存档到 {game.Name} 的存档目录...",
                         Progress = 60
                     });
-                    await TarHelper.ExtractTarToMultipleAsync(latestExitSave.Path, game.ResolvedSaveFolderPaths);
+                    await TarHelper.ExtractTarToMultipleAsync(latestExitSave.Path, restoreTargets);
 
                     // 更新进度：解压完成
                     game.LaunchStatusMessage = "存档恢复完成，正在启动游戏...";
@@ -942,8 +947,18 @@ public class GameService : IQuickSaveGameService
         // 停止定时备份
         ScheduledBackup.StopScheduledBackup(game.Id);
 
+        // 删除前先确认游戏标识是普通单段目录名，避免 ".." 或绝对路径把删除带出工作目录
+        WorkDirectorySafety.ValidateGameId(game.Id);
+
         // 直接拼路径，不调用 GetGameWorkDirectory（那个方法会自动创建目录）
         var gameWorkDir = Path.Combine(_configService.WorkDirectory, game.Id);
+
+        // 不接受链接工作目录，避免误操作映射到其它位置的数据。
+        try { WorkDirectorySafety.EnsureNoReparsePoints(gameWorkDir); }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException("备份目录或其上级存在符号链接/目录联接，已取消删除游戏，请先核对备份实际位置。", ex);
+        }
 
         if (Directory.Exists(gameWorkDir))
         {
